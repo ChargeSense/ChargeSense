@@ -1,0 +1,37 @@
+name: ESP32 firmware
+on:
+  push:
+    branches: [dev, main]
+    paths: ['firmware/**', '.github/workflows/firmware.yml']
+  pull_request:
+    branches: [dev, main]
+    paths: ['firmware/**', '.github/workflows/firmware.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  measurement-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Testar calculos com GCC
+        working-directory: firmware/esp32
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -I main main/measurement.c tests/test_measurement.c -lm -o /tmp/test_measurement
+          /tmp/test_measurement
+  esp32-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: espressif/idf:v5.2.5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compilar para ESP32 classico
+        shell: bash
+        working-directory: firmware/esp32
+        run: |
+          . /opt/esp/idf/export.sh
+          idf.py set-target esp32
+          idf.py build
