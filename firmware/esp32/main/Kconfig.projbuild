@@ -1,0 +1,27 @@
+menu "ChargeSense API local"
+config CHARGESENSE_HTTP_ENABLE
+    bool "Enviar telemetria por Wi-Fi/HTTP"
+    default n
+config CHARGESENSE_SIMULATE
+    bool "Gerar dados simulados sem ler os sensores"
+    depends on CHARGESENSE_HTTP_ENABLE
+    default n
+config CHARGESENSE_WIFI_SSID
+    string "SSID da rede de laboratorio"
+    default ""
+config CHARGESENSE_WIFI_PASSWORD
+    string "Senha Wi-Fi (nao versionar sdkconfig)"
+    default ""
+config CHARGESENSE_API_URL
+    string "URL completa de ingestao"
+    default "http://192.168.1.100:8000/api/v1/telemetry"
+config CHARGESENSE_DEVICE_KEY
+    string "CHARGESENSE_DEVICE_KEY da API"
+    default ""
+config CHARGESENSE_STATION_ID
+    string "Identificador da estacao"
+    default "bancada-01"
+config CHARGESENSE_NTP_SERVER
+    string "Servidor NTP (sem sincronismo, measuredAt sera null)"
+    default "pool.ntp.org"
+endmenu

@@ -24,8 +24,11 @@ bool measurement_push(measurement_t *s, double v, double i, result_t *r) {
     s->vmin = fmin(s->vmin, fmin(v0, v1));
     s->vmax = fmax(s->vmax, fmax(v0, v1));
     s->imin = fmin(s->imin, i); s->imax = fmax(s->imax, i);
-    if (v0 < RAW_LOW || v0 > RAW_HIGH || v1 < RAW_LOW || v1 > RAW_HIGH ||
-        i < RAW_LOW || i > RAW_HIGH) s->clips++;
+    bool vclip = v0 < RAW_LOW || v0 > RAW_HIGH || v1 < RAW_LOW || v1 > RAW_HIGH;
+    bool iclip = i < RAW_LOW || i > RAW_HIGH;
+    if (vclip) s->vclips++;
+    if (iclip) s->iclips++;
+    if (vclip || iclip) s->clips++;
     s->sv += v; s->si += i;
     s->svv += v*v; s->sii += i*i; s->svi += v*i;
     if (++s->n < WINDOW_PAIRS) return false;
@@ -35,9 +38,11 @@ bool measurement_push(measurement_t *s, double v, double i, result_t *r) {
         .ir = sqrt(fmax(0, s->sii / s->n - mi*mi)),
         .covariance = s->svi / s->n - mv*mi,
         .vmean = mv, .imean = mi, .vmin = s->vmin, .vmax = s->vmax,
-        .imin = s->imin, .imax = s->imax, .clips = s->clips
+        .imin = s->imin, .imax = s->imax, .clips = s->clips,
+        .vclips = s->vclips, .iclips = s->iclips
     };
-    s->n = s->clips = 0;
+    s->n = s->clips = s->vclips = s->iclips = 0;
     s->sv = s->si = s->svv = s->sii = s->svi = 0;
     return true;
 }
+

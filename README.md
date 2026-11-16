@@ -1,4 +1,15 @@
-# ChargeSense Mobile
+# ChargeSense
+
+## Integração local hardware/software
+
+- [API local e execução no computador](backend/README.md): FastAPI, SQLite e simulador HTTP.
+- [Contrato de telemetria e endpoints](backend/CONTRACT.md).
+- [Firmware ESP32 e comunicação Wi-Fi](firmware/esp32/README.md).
+
+O aplicativo em `chargesense-mobile/` permanece independente nesta etapa; ainda não consome a API.
+O firmware possui modos de aquisição e simulação. Os dados simulados nunca são apresentados como sensores reais.
+
+## Aplicativo mobile
 
 Aplicativo Android desenvolvido como protótipo do TCC para acompanhar as grandezas elétricas de uma estação de recarga. A tela mostra **corrente, tensão, potência ativa e temperatura**, além de um histórico de leituras.
 
@@ -59,3 +70,4 @@ Para verificar o TypeScript sem abrir o emulador:
 cd chargesense-mobile
 npm run typecheck
 ```
+

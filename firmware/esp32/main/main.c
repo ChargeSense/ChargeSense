@@ -10,6 +10,7 @@
 #include "soc/soc_caps.h"
 #include "measurement.h"
 #include "config.h"
+#include "telemetry.h"
 #if !CONFIG_IDF_TARGET_ESP32
 #error "Este projeto exige ESP32 classico; adapte canais/formato para outros chips."
 #endif
@@ -25,6 +26,16 @@ static void halt(adc_continuous_handle_t adc, const char *reason) {
     for (;;) vTaskDelay(pdMS_TO_TICKS(1000));
 }
 void app_main(void) {
+    telemetry_init();
+#if CONFIG_CHARGESENSE_SIMULATE
+    /* Testar rede/API sem sensores. Jamais rotular como leitura real. */
+    unsigned sample = 0;
+    for (;;) {
+        double current = 0.5 + 0.2 * sin(sample++ / 5.0);
+        telemetry_submit(12.0, current, 12.0 * current, NAN, "valid", true);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+    }
+#endif
     if (!isfinite(SENSOR_PHASE_SAMPLES) || fabs(SENSOR_PHASE_SAMPLES) > 20 ||
         VOLTS_PER_COUNT < 0 || AMPS_PER_COUNT < 0 ||
         !isfinite(VOLTS_PER_COUNT) || !isfinite(AMPS_PER_COUNT) ||
@@ -72,19 +83,26 @@ void app_main(void) {
                 result_t r;
                 if (!measurement_push(&measurement, v, raw, &r)) continue;
                 if (overflow) halt(adc, "overflow DMA");
-                bool calibrated = VOLTS_PER_COUNT > 0 && AMPS_PER_COUNT > 0;
-                double vr = VOLTS_PER_COUNT > 0 ? r.vr*VOLTS_PER_COUNT : NAN;
+                bool calibrated = AMPS_PER_COUNT > 0;
+                double vr = VOLTAGE_CHANNEL_ENABLED && VOLTS_PER_COUNT > 0 ? r.vr*VOLTS_PER_COUNT : NAN;
                 double ir = AMPS_PER_COUNT > 0 ? r.ir*AMPS_PER_COUNT : NAN;
-                bool good = calibrated && !r.clips && r.vr >= MIN_RMS_COUNTS &&
-                    r.ir >= MIN_RMS_COUNTS && ir <= SCT_RATED_AMPS;
+                double ipeak = fmax(fabs(r.imin-r.imean), fabs(r.imax-r.imean))*AMPS_PER_COUNT;
+                bool current_ok = calibrated && !r.iclips && r.ir >= MIN_RMS_COUNTS && ipeak <= CURRENT_SENSOR_PEAK_AMPS;
+                bool voltage_ok = VOLTAGE_CHANNEL_ENABLED && VOLTS_PER_COUNT > 0 && !r.vclips && r.vr >= MIN_RMS_COUNTS;
+                bool good = current_ok && voltage_ok;
                 double apparent = good ? vr*ir : NAN;
                 double power = good ? r.covariance*VOLTS_PER_COUNT*AMPS_PER_COUNT*CURRENT_SIGN : NAN;
                 double pf = good && apparent > 0 ? power/apparent : NAN;
                 double seconds = (double)WINDOW_PAIRS/PAIR_RATE;
                 if (good && POWER_VALIDATED) energy += power*seconds/3600.0;
-                const char *status = r.clips ? "RECORTE_ADC" : !calibrated ? "SEM_CALIBRACAO" :
-                    ir > SCT_RATED_AMPS ? "FORA_FAIXA_SCT" : !good ? "SINAL_BAIXO_OU_AUSENTE" :
+                const char *status = r.iclips ? "RECORTE_ADC_CORRENTE" : !calibrated ? "SEM_CALIBRACAO" :
+                    ipeak > CURRENT_SENSOR_PEAK_AMPS ? "FORA_FAIXA_ACS712" : !current_ok ? "SINAL_BAIXO_OU_AUSENTE" :
+                    !VOLTAGE_CHANNEL_ENABLED ? "CORRENTE_APENAS" : !good ? "TENSAO_INVALIDA" :
                     POWER_VALIDATED ? "VALIDADO_PELO_USUARIO" : "P_FP_NAO_VALIDADOS";
+                /* API recebe somente valores aceitos, nao nan JSON ou estimativas de P. */
+                const char *quality = !calibrated ? "uncalibrated" : current_ok ? "valid" : "invalid";
+                telemetry_submit(current_ok && voltage_ok ? vr : NAN, current_ok ? ir : NAN,
+                    good && POWER_VALIDATED ? power : NAN, NAN, quality, false);
                 ++window;
                 printf("%lu,%.3f,%.4f,%.4f,%.2f,%.2f,%.0f,%.0f,%.0f,%.0f,%.4f,%.5f,%.4f,%.4f,%.5f,%.7f,%u,%s\n",
                     window, window*seconds, r.vr,r.ir,r.vmean,r.imean,r.vmin,r.vmax,r.imin,r.imax,
@@ -93,3 +111,4 @@ void app_main(void) {
         }
     }
 }
+

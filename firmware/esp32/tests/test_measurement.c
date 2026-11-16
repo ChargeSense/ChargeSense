@@ -28,5 +28,10 @@ int main(void) {
     s = (measurement_t){0};
     for (unsigned n=0;n<WINDOW_PAIRS+64;n++) measurement_push(&s,4095,0,&r);
     assert(r.clips == WINDOW_PAIRS);
+    assert(r.vclips == WINDOW_PAIRS && r.iclips == WINDOW_PAIRS);
+    s = (measurement_t){0};
+    for (unsigned n=0;n<WINDOW_PAIRS+64;n++) measurement_push(&s,0,2000,&r);
+    assert(r.vclips == WINDOW_PAIRS && r.iclips == 0);
     puts("PASS: RMS, offset, fase 0/60/180 graus, continuidade e recorte.");
 }
+

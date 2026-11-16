@@ -6,8 +6,11 @@
 /* Zero = nao calibrado. Obtidos com instrumento de referencia, NAO adivinhar. */
 #define VOLTS_PER_COUNT 0.0
 #define AMPS_PER_COUNT 0.0
-/* 005: 5 A; 010: 10 A; 030: 30 A. Nao equivale ao limite da bancada. */
-#define SCT_RATED_AMPS 5.0
+/* Hardware confirmado: ACS712-30A. Limite de pico do sensor, NAO da bancada. */
+#define CURRENT_SENSOR_PEAK_AMPS 30.0
+/* Divisor de tensao fotografado nao pode ser ligado diretamente em AC.
+   Habilitar somente depois de reprojetar e validar o condicionamento. */
+#define VOLTAGE_CHANNEL_ENABLED 0
 #define CURRENT_SIGN 1.0
 /* Avanco adicional da tensao em periodos de 100 us. Limite +/-20.
    0.5 periodo do multiplexador ja e compensado no measurement.c.
@@ -19,3 +22,4 @@
 #define RAW_LOW 50
 #define RAW_HIGH 4045
 #define MIN_RMS_COUNTS 3.0
+

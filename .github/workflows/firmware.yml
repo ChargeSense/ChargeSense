@@ -23,6 +23,9 @@ jobs:
           gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -I main main/measurement.c tests/test_measurement.c -lm -o /tmp/test_measurement
           /tmp/test_measurement
   esp32-build:
+    strategy:
+      matrix:
+        profile: [offline, http, simulator]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     container: espressif/idf:v5.2.5
@@ -33,5 +36,12 @@ jobs:
         working-directory: firmware/esp32
         run: |
           . /opt/esp/idf/export.sh
+          if [ "${{ matrix.profile }}" != "offline" ]; then
+            echo 'CONFIG_CHARGESENSE_HTTP_ENABLE=y' > sdkconfig.defaults
+          fi
+          if [ "${{ matrix.profile }}" = "simulator" ]; then
+            echo 'CONFIG_CHARGESENSE_SIMULATE=y' >> sdkconfig.defaults
+          fi
           idf.py set-target esp32
           idf.py build
+
