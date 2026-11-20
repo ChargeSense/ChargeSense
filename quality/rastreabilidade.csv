@@ -1,0 +1,18 @@
+﻿Caso,Requisito,Script,Pre_condicoes,Passos,Dados,Oraculo
+TC01,RF01,tests/test_quality.py::test_TC01_measurements,API iniciada; mensagem válida nova.,Substituir a grandeza pelo valor parametrizado; POST.,"Corrente, tensão e temperatura da tabela AVL.",201 dentro do intervalo; 422 fora.
+TC02,RF02,tests/test_quality.py::test_TC02_pagination,API iniciada com uma leitura.,Consultar readings e events com cada limit.,"0, 1, 2, 499, 500, 501, abc.",200 para 1–500; 422 demais.
+TC03,RF03,tests/test_quality.py::test_TC03_decision,Limiares sintéticos 1/2/3 e banco vazio.,POST com qualidade/corrente; consultar eventos.,14 combinações parametrizadas R1–R8.,Código e lista exata de níveis da tabela de decisão.
+TC04,RF04,tests/test_quality.py::test_TC04_status_boundary,Leitura recebida no instante fixo.,Avançar Mock do relógio e consultar status.,"14,999; 15; 15,001 segundos.",online/fresh até 15; offline/stale acima.
+TC05,RF04,tests/test_quality.py::test_TC05_future,Relógio fixo em 20/11/2026 12:00 UTC.,Enviar measuredAt à frente do relógio.,"29,999; 30; 30,001 segundos.",201 até 30; 422 acima.
+TC06,RF01,tests/test_quality.py::test_TC06_integer,Payload-base com números inteiros.,Substituir sequence e uptimeMs; enviar.,"−1; 0; 1; máximo−1/máximo/máximo+1; true; 1,5.",201 em inteiros válidos; 422 demais.
+TC07,RF05,tests/test_quality.py::test_TC07_auth,Chaves de leitura e dispositivo distintas.,Enviar telemetria com cada credencial.,"Ausente, errada, READ, WRITE.",401 nas três primeiras; 201 em WRITE.
+TC08,RF01,tests/test_quality.py::test_TC08_body,Payload JSON válido e banco vazio.,Completar JSON com espaços e transmitir corpo bruto.,"8191, 8192, 8193 bytes.","201, 201, 413 respectivamente."
+TC09,RF01,tests/test_quality.py::test_TC09_invalid_classes,Payload-base válido.,Alterar um campo por caso; POST.,"source/quality/UUID inválidos; stationId vazio, 65 ou ../x; versão 2.",422 em todos.
+TC10,RF06,tests/test_quality.py::test_TC10_atomic_conflict,Banco vazio; corrente 3 A.,"Enviar, repetir, alterar corrente para 4 e reenviar; consultar eventos.",Mesma identidade e conteúdo igual/diferente.,201/200/409; id igual nas duas primeiras; um evento.
+TC11,RF02,tests/test_quality.py::test_TC11_store_isolation,Store.latest substituído por Mock(None).,Consultar latest e inspecionar chamada do mock.,Estação bancada-01; source sensor.,404; chamada única com argumentos esperados.
+TC12,RF01,tests/test_quality.py::test_TC12_unit_nonfinite,Modelo Telemetry importado diretamente.,Validar payload com corrente não finita.,"NaN, +Infinity, −Infinity.",ValidationError em todos.
+TC13,OBS01,tests/test_quality.py::test_TC13_numeric_coercion_characterization,API atual sem correções.,Enviar bool/texto e consultar latest.,true e string 1.5.,"Caracterização: 201 e conversão para 1,0/1,5."
+TC14,RP01,tests/test_quality.py::test_TC14_strict_numeric_proposed,Critério QA proposto: apenas número JSON.,Enviar bool/texto como corrente.,true e string 1.5.,"Esperado proposto 422; observado 201. Dois xfail strict, D-01."
+TC15,RF07,tests/test_quality.py::test_TC15_bad_config,Banco temporário; chaves válidas.,Iniciar app com limiares inválidos.,"(1,1,3), (−1,2,3), (1,2), (1,2,Infinity).",RuntimeError antes de aceitar requisições.
+TC16,RF08,tests/test_quality.py::test_TC16_firmware_native,GCC disponível; fontes C originais.,Compilar com avisos como erro e executar binário.,"Senoides em 0°/60°/180°, constante e recorte.",Assertivas C e processo com saída PASS; sem falha.
+TC17,RF03,tests/test_quality.py::test_TC17_partial_measurement,Qualidade válida; somente tensão disponível.,Enviar tensão e corrente null; consultar eventos.,voltageV=220; currentA=null.,201; sem evento de corrente (R9).
