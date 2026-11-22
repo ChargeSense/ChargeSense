@@ -1,4 +1,4 @@
-"""Simulador HTTP: mesma mensagem do ESP32, sempre source=simulated."""
+"""Simulador HTTP: telemetria demonstrativa de uma estação de recarga EV."""
 import argparse
 import json
 import math
@@ -11,12 +11,16 @@ from datetime import datetime, timezone
 
 
 def make_payload(boot_id, sequence, uptime_ms):
-    current = round(0.5 + 0.2 * math.sin(sequence / 5), 4)
+    # Valores plausíveis para a bancada de demonstração: rede monofásica 220 V.
+    voltage = round(220.0 + 0.8 * math.sin(sequence / 7), 2)
+    current = round(15.5 + 1.0 * math.sin(sequence / 5), 2)
+    temperature = round(32.0 + 1.5 * math.sin(sequence / 11), 2)
+    power = round(voltage * current * 0.95, 2)
     return {'schemaVersion': 1, 'stationId': os.getenv('CHARGESENSE_STATION_ID', 'bancada-01'),
             'bootId': boot_id, 'sequence': sequence, 'source': 'simulated',
             'measuredAt': datetime.now(timezone.utc).isoformat(), 'uptimeMs': uptime_ms,
-            'quality': 'valid', 'measurements': {'voltageV': 12.0, 'currentA': current,
-            'activePowerW': round(12 * current, 4), 'panelTempC': None}}
+            'quality': 'valid', 'measurements': {'voltageV': voltage, 'currentA': current,
+            'activePowerW': power, 'panelTempC': temperature}}
 
 
 def main():

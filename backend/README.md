@@ -1,6 +1,6 @@
 # API local ChargeSense
 
-**ESP32 → Wi-Fi/HTTP → FastAPI → SQLite → consultas do software.** O aplicativo existente não foi alterado; a interface será integrada depois. Não cria recursos AWS nem executa comandos no quadro.
+**ESP32/simulador → Wi-Fi/HTTP → FastAPI → SQLite → ChargeSense Mobile.** A API recebe telemetria e fornece consultas autenticadas. Não cria recursos AWS nem executa comandos no quadro.
 
 ## Executar
 
@@ -16,58 +16,43 @@ $env:CHARGESENSE_READ_KEY = (python -c "import secrets; print(secrets.token_hex(
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Linux/macOS, na pasta backend:
-
-```sh
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -r requirements.txt
-export CHARGESENSE_DEVICE_KEY="$(python -c 'import secrets; print(secrets.token_hex(24))')"
-export CHARGESENSE_READ_KEY="$(python -c 'import secrets; print(secrets.token_hex(24))')"
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-Chaves privadas, diferentes, mínimo 24 caracteres. Sem chave padrão. Essas variáveis só existem no terminal e processos filhos: no segundo terminal, definir as MESMAS chaves por canal local privado. Não gerar novas se a API continua com as antigas. Não há leitura automática de .env.
+Chaves privadas, diferentes, mínimo 24 caracteres. Sem chave padrão. Não gerar novas se a API continua com as antigas.
 
 - Documentação interativa: http://127.0.0.1:8000/docs
-- OpenAPI: http://127.0.0.1:8000/openapi.json
 - Saúde: http://127.0.0.1:8000/health
-
-No Swagger, usar Authorize com chave de dispositivo para POST; trocar para chave de leitura para GET. Documentação/saúde são públicas; dados são autenticados. Banco persistente: `backend/data/chargesense.db`. `CHARGESENSE_DB` muda o caminho. Usar uma instância Uvicorn; SQLite não é proposta de persistência distribuída.
+- Banco persistente: `backend/data/chargesense.db`
 
 ## Simular sem placa
 
-Com API rodando e chave de dispositivo definida no segundo terminal, dentro de backend:
-
-```sh
-python tools/simulate.py --count 10 --interval 2
-```
-
-Dados fictícios de 12 V e aproximadamente 0,3–0,7 A, potência resistiva e temperatura null. Sempre source=simulated. Também há [simulador embarcado no ESP32](../firmware/esp32/README.md), que não lê sensores.
-
-Consultar no PowerShell com chave de leitura:
+Com a API rodando, abra outro terminal, defina a mesma chave de dispositivo e execute dentro de `backend`:
 
 ```powershell
-$headers = @{"X-API-Key" = $env:CHARGESENSE_READ_KEY}
-Invoke-RestMethod "http://127.0.0.1:8000/api/v1/stations/bancada-01/latest?source=simulated" -Headers $headers
-Invoke-RestMethod "http://127.0.0.1:8000/api/v1/stations/bancada-01/status?source=simulated" -Headers $headers
+$env:CHARGESENSE_DEVICE_KEY = "COLE_A_MESMA_CHAVE_DO_TERMINAL_DA_API"
+python tools/simulate.py --count 60 --interval 2
 ```
 
-## Acesso na rede local
+O simulador envia `source=simulated` e grandezas fictícias plausíveis para a bancada EV: tensão próxima de 220 V, corrente próxima de 15,5 A, potência ativa calculada com fator de potência estimado de 0,95 e temperatura do quadro próxima de 32 °C. Esses números são apenas dados demonstrativos, não limites de segurança nem medições reais.
 
-Reiniciar com `--host 0.0.0.0`. Descobrir IPv4 LAN do PC (ipconfig no Windows) e usar esse endereço no ESP32, por exemplo http://192.168.1.20:8000. Liberar porta TCP 8000 somente na rede privada do firewall se necessário; não abrir acesso pelo roteador à internet. PC/placa/telefone precisam se comunicar; redes de convidados podem impedir.
+## Conectar o aplicativo
 
-Localhost no celular/ESP32 é o próprio aparelho. No emulador Android padrão, o host costuma ser 10.0.2.2. O futuro app precisa de cliente HTTP, configuração de transporte de desenvolvimento e armazenamento seguro da chave de leitura; não colocar nele a chave de dispositivo. Não foram alterados arquivos mobile. Não há CORS global; futuro frontend web deverá autorizar apenas suas origens.
+No app, selecione **Configurações → Backend local**.
 
-HTTP local transmite a chave em claro: usar apenas rede confiável de laboratório. AWS deve usar TLS e identidades por dispositivo/usuário, não o token compartilhado deste protótipo.
+- Emulador Android padrão: `http://10.0.2.2:8000`.
+- Celular físico: reinicie o servidor com `python -m uvicorn app.main:app --host 0.0.0.0 --port 8000`, descubra o IPv4 LAN do computador (`ipconfig` no Windows) e informe `http://IP_DO_PC:8000` no app.
+- Informe a mesma `CHARGESENSE_READ_KEY` usada no terminal da API.
+- Selecione `Simulador` para os dados do script acima ou `Sensores` para telemetria enviada pelo ESP32.
+
+Liberar a porta TCP 8000 somente na rede privada do firewall se necessário. Não abrir acesso pelo roteador à internet. Redes de convidados podem impedir comunicação entre dispositivos.
+
+**Atenção:** HTTP local transmite a chave em claro. Use somente em rede confiável de laboratório. AWS/produção deve usar TLS e identidades individuais, não a chave compartilhada deste protótipo.
 
 ## Eventos e configuração
 
-Ver [contrato](CONTRACT.md). Consultas podem ocorrer a cada 2 s; não há WebSocket nesta etapa. StationId padrão `bancada-01`, configurável em `CHARGESENSE_STATION_ID`.
+Ver [contrato](CONTRACT.md). Consultas usam `X-API-Key` com chave de leitura. Ingestão usa a chave de dispositivo. `stationId` padrão: `bancada-01`.
 
-Leituras inválidas/sem calibração geram eventos de diagnóstico. Limites de corrente ficam DESABILITADOS por padrão. Para testar software, configurar `CHARGESENSE_CURRENT_LEVELS` com três valores RMS em A positivos crescentes, por exemplo `0.4,0.5,0.6` para o simulador; reiniciar API. São valores fictícios, não parâmetros de proteção física.
+Limites de corrente ficam desabilitados por padrão. Para testar eventos com o simulador, configure três valores RMS crescentes em ampères antes de iniciar a API, por exemplo `15,16,17` (atenção, alerta, crítico) e reinicie o processo. São valores fictícios para teste de software, não parâmetros de proteção física.
 
-Cada leitura acima do limite gera evento attention/alert/critical. Sem histerese, agrupamento de incidentes ou notificações push nesta versão. Simulação tem eventos separados. API não aciona relé nem substitui futura lógica local de corte.
+Cada leitura acima do limite gera evento. Ainda não há histerese, agrupamento de incidentes ou notificações push nesta versão. A API não aciona relé nem substitui futura lógica local de segurança.
 
 ## Testar
 
@@ -75,10 +60,6 @@ Cada leitura acima do limite gera evento attention/alert/critical. Sem histerese
 python -m unittest discover -s tests -v
 ```
 
-Testes cobrem autenticação, origens, deduplicação concorrente, conflito, persistência, paginação, números inválidos, null, horários/ordem, offline e eventos. CI repete os testes.
+## Migração futura
 
-## Migração AWS
-
-Contrato JSON v1 pode ser mantido em ingestão MQTT/AWS IoT Core. `app/store.py` concentra a persistência a substituir por banco gerenciado; `models.py` valida dados; `main.py` reúne rotas e regras iniciais. Ainda exige provisionamento, identidade, TLS, retenção, limites de taxa e observabilidade.
-
-Hoje histórico cresce sem retenção automática, chaves atendem uma estação, e fila embarcada não é persistente. Backup SQLite deve ser consistente com WAL; não copiar somente o arquivo principal com servidor ativo.
+O contrato JSON v1 pode ser mantido em uma futura ingestão MQTT/AWS IoT Core. A persistência SQLite é local e não é proposta de banco distribuído. A migração exige provisionamento, identidade, TLS, retenção, limites de taxa e observabilidade.
