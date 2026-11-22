@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Testar calculos com GCC
         working-directory: firmware/esp32
         run: |
@@ -30,7 +30,7 @@ jobs:
     timeout-minutes: 20
     container: espressif/idf:v5.2.5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Compilar para ESP32 classico
         shell: bash
         working-directory: firmware/esp32
