@@ -50,7 +50,7 @@ Liberar a porta TCP 8000 somente na rede privada do firewall se necessário. Nã
 
 Ver [contrato](CONTRACT.md). Consultas usam `X-API-Key` com chave de leitura. Ingestão usa a chave de dispositivo. `stationId` padrão: `bancada-01`.
 
-Limites de corrente ficam desabilitados por padrão. Para testar eventos com o simulador, configure três valores RMS crescentes em ampères antes de iniciar a API, por exemplo `15,8,17` (atenção, alerta, crítico) e reinicie o processo. São valores fictícios para teste de software, não parâmetros de proteção física.
+Limites de corrente ficam desabilitados por padrão. Para testar eventos com o simulador, configure três valores RMS crescentes em ampères antes de iniciar a API, por exemplo `15,16,17` (atenção, alerta, crítico) e reinicie o processo. São valores fictícios para teste de software, não parâmetros de proteção física.
 
 Cada leitura acima do limite gera evento. Ainda não há histerese, agrupamento de incidentes ou notificações push nesta versão. A API não aciona relé nem substitui futura lógica local de segurança.
 
