@@ -36,7 +36,12 @@ function levelName(level: StationEvent['level']): string {
   return ({ diagnostic: 'Diagnóstico', attention: 'Atenção', alert: 'Alerta', critical: 'Crítico' })[level];
 }
 function eventName(kind: string): string {
-  return ({ measurement_uncalibrated: 'Medição não calibrada', measurement_invalid: 'Medição inválida', current_threshold: 'Limite de corrente atingido' })[kind] ?? kind.replaceAll('_', ' ');
+  const names: Record<string, string> = {
+    measurement_uncalibrated: 'Medição não calibrada',
+    measurement_invalid: 'Medição inválida',
+    current_threshold: 'Limite de corrente atingido',
+  };
+  return names[kind] ?? kind.replace(/_/g, ' ');
 }
 
 function Header({ subtitle }: { subtitle: string }) {
