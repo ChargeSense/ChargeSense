@@ -1,210 +1,316 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
-import { SQLiteProvider, useSQLiteContext } from 'expo-sqlite';
-import { initializeDatabase, insertReading, listReadings, type Reading } from './data/readings';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView,
+  StatusBar, StyleSheet, Text, TextInput, View,
+} from 'react-native';
+import { MetricCard } from './components/MetricCard';
+import { StatusPill } from './components/StatusPill';
+import { chargesenseApi, type ApiConfig } from './services/api';
+import { colors } from './theme/tokens';
+import type { DataSource, StationEvent, StationStatus, TelemetryReading } from './types/telemetry';
 
-function horarioBrasilia(data: string) {
-  return new Date(data).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+type Tab = 'overview' | 'history' | 'events' | 'settings';
+type Mode = 'demo' | 'backend';
+
+const STATION_ID = 'bancada-01';
+const DEFAULT_URL = Platform.OS === 'android' ? 'http://10.0.2.2:8000' : 'http://localhost:8000';
+
+function demoReading(sequence: number): TelemetryReading {
+  const current = Number((15.2 + Math.sin(sequence / 3) * 0.8).toFixed(1));
+  const voltage = Number((220 + Math.sin(sequence / 5) * 1.2).toFixed(1));
+  const temperature = Number((32 + Math.sin(sequence / 7) * 1.4).toFixed(1));
+  return {
+    id: sequence + 1, schemaVersion: 1, stationId: STATION_ID, bootId: 'demo-session',
+    sequence, source: 'simulated', measuredAt: new Date().toISOString(),
+    receivedAt: new Date().toISOString(), uptimeMs: sequence * 5000, quality: 'valid',
+    measurements: { currentA: current, voltageV: voltage, activePowerW: Math.round(current * voltage * 0.95), panelTempC: temperature },
+  };
 }
 
-function TelaPrincipal() {
-  const banco = useSQLiteContext();
-  const [leituras, setLeituras] = useState<Reading[]>([]);
-  const [carregando, setCarregando] = useState(true);
-  const [mostrarFormulario, setMostrarFormulario] = useState(false);
-  const [simulando, setSimulando] = useState(false);
-  const [corrente, setCorrente] = useState('');
-  const [tensao, setTensao] = useState('');
-  const [potencia, setPotencia] = useState('');
-  const [temperatura, setTemperatura] = useState('');
+function formatDate(value: string | null | undefined): string {
+  if (!value) return 'Horário indisponível';
+  return new Date(value).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'medium' });
+}
+function sourceName(source: DataSource): string { return source === 'sensor' ? 'Sensores' : 'Simulador'; }
+function levelName(level: StationEvent['level']): string {
+  return ({ diagnostic: 'Diagnóstico', attention: 'Atenção', alert: 'Alerta', critical: 'Crítico' })[level];
+}
+function eventName(kind: string): string {
+  return ({ measurement_uncalibrated: 'Medição não calibrada', measurement_invalid: 'Medição inválida', current_threshold: 'Limite de corrente atingido' })[kind] ?? kind.replaceAll('_', ' ');
+}
 
-  async function carregarLeituras() {
-    try {
-      setLeituras(await listReadings(banco));
-    } catch {
-      Alert.alert('Erro', 'Não foi possível carregar as leituras.');
-    } finally {
-      setCarregando(false);
-    }
-  }
+function Header({ subtitle }: { subtitle: string }) {
+  return <View style={styles.header}>
+    <View style={styles.brandMark}><View style={styles.brandBolt}><Text style={styles.brandBoltText}>C</Text></View></View>
+    <View style={{ flex: 1 }}><Text style={styles.brand}>CHARGESENSE</Text><Text style={styles.headerSubtitle}>{subtitle}</Text></View>
+    <View style={styles.headerTag}><Text style={styles.headerTagText}>TCC</Text></View>
+  </View>;
+}
 
-  useEffect(() => {
-    carregarLeituras();
-  }, [banco]);
+function SectionTitle({ title, detail }: { title: string; detail?: string }) {
+  return <View style={styles.sectionTitle}><Text style={styles.sectionHeading}>{title}</Text>{detail ? <Text style={styles.sectionDetail}>{detail}</Text> : null}</View>;
+}
 
-  useEffect(() => {
-    if (!simulando) return;
-
-    let ativo = true;
-
-    async function gerarLeitura() {
-      const correnteSimulada = Number((14 + Math.random() * 4).toFixed(1));
-      const tensaoSimulada = Number((218 + Math.random() * 4).toFixed(1));
-      const temperaturaSimulada = Number((29 + Math.random() * 6).toFixed(1));
-
-      try {
-        await insertReading(banco, {
-          currentA: correnteSimulada,
-          voltageV: tensaoSimulada,
-          activePowerW: Math.round(correnteSimulada * tensaoSimulada * 0.95),
-          panelTempC: temperaturaSimulada,
-        }, 'demo');
-        if (ativo) await carregarLeituras();
-      } catch {
-        if (ativo) {
-          setSimulando(false);
-          Alert.alert('Erro', 'A simulação foi interrompida.');
-        }
-      }
-    }
-
-    gerarLeitura();
-    const intervalo = setInterval(gerarLeitura, 5000);
-    return () => {
-      ativo = false;
-      clearInterval(intervalo);
-    };
-  }, [simulando, banco]);
-
-  async function salvarLeitura() {
-    if (!corrente.trim() || !tensao.trim() || !potencia.trim() || !temperatura.trim()) {
-      Alert.alert('Atenção', 'Preencha todos os campos.');
-      return;
-    }
-
-    try {
-      // Aceita vírgula ou ponto como separador decimal.
-      await insertReading(banco, {
-        currentA: Number(corrente.replace(',', '.')),
-        voltageV: Number(tensao.replace(',', '.')),
-        activePowerW: Number(potencia.replace(',', '.')),
-        panelTempC: Number(temperatura.replace(',', '.')),
-      });
-      setCorrente('');
-      setTensao('');
-      setPotencia('');
-      setTemperatura('');
-      setMostrarFormulario(false);
-      await carregarLeituras();
-    } catch (erro) {
-      Alert.alert('Erro', erro instanceof Error ? erro.message : 'Não foi possível salvar.');
-    }
-  }
-
-  const ultima = leituras[0];
-
-  return (
-    <View style={styles.tela}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f2f5f9" />
-      <ScrollView
-        style={styles.rolagem}
-        contentContainerStyle={styles.conteudo}
-        scrollEnabled
-        showsVerticalScrollIndicator
-        persistentScrollbar
-        keyboardDismissMode="on-drag"
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text style={styles.titulo}>ChargeSense</Text>
-        <Text style={styles.subtitulo}>Monitoramento da estação de recarga</Text>
-
-        <Text style={styles.secao}>Última leitura</Text>
-        {carregando && <ActivityIndicator />}
-        {!carregando && !ultima && <Text>Nenhuma leitura encontrada.</Text>}
-
-        {ultima && (
-          <View>
-            <Text style={styles.data}>{horarioBrasilia(ultima.measuredAt)} (horário de Brasília)</Text>
-            <View style={styles.linha}>
-              <View style={styles.cartao}>
-                <Text style={styles.rotulo}>Corrente</Text>
-                <Text style={styles.valor}>{ultima.currentA.toFixed(1)} A</Text>
-              </View>
-              <View style={styles.cartao}>
-                <Text style={styles.rotulo}>Tensão</Text>
-                <Text style={styles.valor}>{ultima.voltageV.toFixed(1)} V</Text>
-              </View>
-            </View>
-            <View style={styles.linha}>
-              <View style={styles.cartao}>
-                <Text style={styles.rotulo}>Potência</Text>
-                <Text style={styles.valor}>{ultima.activePowerW.toFixed(0)} W</Text>
-              </View>
-              <View style={styles.cartao}>
-                <Text style={styles.rotulo}>Temperatura</Text>
-                <Text style={styles.valor}>{ultima.panelTempC.toFixed(1)} °C</Text>
-              </View>
-            </View>
-          </View>
-        )}
-
-        <Text style={styles.aviso}>Dados de demonstração ou inseridos manualmente. Ainda não há sensores conectados.</Text>
-        <Pressable style={[styles.botao, styles.botaoSimulacao]} onPress={() => setSimulando(!simulando)}>
-          <Text style={styles.textoBotao}>{simulando ? 'Parar simulação' : 'Simulação'}</Text>
-        </Pressable>
-        <Text style={styles.textoSimulacao}>
-          {simulando ? 'Simulação ativa: uma leitura nova a cada 5 segundos.' : 'Toque para gerar leituras automaticamente.'}
-        </Text>
-        <Pressable style={styles.botao} onPress={() => setMostrarFormulario(!mostrarFormulario)}>
-          <Text style={styles.textoBotao}>{mostrarFormulario ? 'Cancelar' : 'Adicionar leitura'}</Text>
-        </Pressable>
-
-        {mostrarFormulario && (
-          <View>
-            <Text style={styles.secao}>Nova leitura</Text>
-            <Text>Corrente (A)</Text>
-            <TextInput style={styles.campo} value={corrente} onChangeText={setCorrente} keyboardType="decimal-pad" placeholder="Ex.: 15,2" />
-            <Text>Tensão (V)</Text>
-            <TextInput style={styles.campo} value={tensao} onChangeText={setTensao} keyboardType="decimal-pad" placeholder="Ex.: 220" />
-            <Text>Potência ativa (W)</Text>
-            <TextInput style={styles.campo} value={potencia} onChangeText={setPotencia} keyboardType="decimal-pad" placeholder="Ex.: 3200" />
-            <Text>Temperatura (°C)</Text>
-            <TextInput style={styles.campo} value={temperatura} onChangeText={setTemperatura} keyboardType="decimal-pad" placeholder="Ex.: 31,5" />
-            <Pressable style={styles.botao} onPress={salvarLeitura}>
-              <Text style={styles.textoBotao}>Salvar</Text>
-            </Pressable>
-          </View>
-        )}
-
-        <Text style={styles.secao}>Histórico</Text>
-        {leituras.slice(0, 8).map((leitura) => (
-          <View key={leitura.id} style={styles.itemHistorico}>
-            <Text style={styles.hora}>{horarioBrasilia(leitura.measuredAt)} · {leitura.source === 'demo' ? 'Exemplo/simulação' : 'Manual'}</Text>
-            <Text>{leitura.currentA.toFixed(1)} A  •  {leitura.voltageV.toFixed(1)} V</Text>
-            <Text>{leitura.activePowerW.toFixed(0)} W  •  {leitura.panelTempC.toFixed(1)} °C</Text>
-          </View>
-        ))}
-      </ScrollView>
+function Overview({ reading, status, mode, refreshing, error, onRefresh, events }: {
+  reading: TelemetryReading | null; status: StationStatus | null; mode: Mode; refreshing: boolean;
+  error: string | null; onRefresh: () => void; events: StationEvent[];
+}) {
+  const m = reading?.measurements;
+  const temperatureColor = m?.panelTempC != null && m.panelTempC >= 45 ? colors.warning : colors.text;
+  return <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
+    <View style={styles.stationHeading}>
+      <View><Text style={styles.eyebrow}>ESTAÇÃO MONITORADA</Text><Text style={styles.stationName}>Bancada 01</Text><Text style={styles.stationId}>{STATION_ID}</Text></View>
+      <StatusPill state={mode === 'demo' ? 'online' : status?.connection ?? 'never_seen'} />
     </View>
-  );
+    <View style={styles.sourceLine}>
+      <View style={[styles.sourceDot, { backgroundColor: mode === 'demo' ? colors.blue : colors.accent }]} />
+      <Text style={styles.sourceText}>{mode === 'demo' ? 'Demonstração local' : `Backend local · ${sourceName(status?.source ?? 'simulated')}`}</Text>
+      <Text style={styles.sourceDivider}>/</Text>
+      <Text style={styles.sourceText}>{mode === 'demo' ? 'sem hardware' : status?.freshness === 'fresh' ? 'dados recentes' : status?.freshness === 'stale' ? 'dados desatualizados' : 'frescor desconhecido'}</Text>
+    </View>
+
+    <View style={styles.panel}>
+      <View style={styles.panelTop}><Text style={styles.panelLabel}>VISÃO GERAL</Text><Text style={styles.panelTime}>{reading ? formatDate(reading.measuredAt) : 'Sem leitura'}</Text></View>
+      {reading ? <View style={styles.metricsGrid}>
+        <MetricCard label="CORRENTE" value={m?.currentA} unit="A" accent={colors.accent} />
+        <MetricCard label="TENSÃO" value={m?.voltageV} unit="V" />
+        <MetricCard label="POTÊNCIA ATIVA" value={m?.activePowerW} unit="W" precision={0} />
+        <MetricCard label="TEMP. DO QUADRO" value={m?.panelTempC} unit="°C" accent={temperatureColor} />
+      </View> : <View style={styles.emptyState}><Text style={styles.emptyTitle}>Nenhuma leitura recebida</Text><Text style={styles.emptyText}>Verifique a conexão com o backend e a origem selecionada.</Text></View>}
+      <View style={styles.panelFooter}><Text style={styles.footerLabel}>QUALIDADE DA MEDIÇÃO</Text><Text style={styles.footerValue}>{reading?.quality === 'valid' ? 'Válida' : reading?.quality === 'uncalibrated' ? 'Não calibrada' : reading?.quality === 'invalid' ? 'Inválida' : '—'}</Text></View>
+    </View>
+
+    <View style={styles.infoRow}>
+      <View style={styles.infoCard}><Text style={styles.infoLabel}>ÚLTIMO RECEBIMENTO</Text><Text style={styles.infoValue}>{status?.lastReceivedAt ? formatDate(status.lastReceivedAt) : mode === 'demo' ? 'Agora · local' : 'Ainda não recebido'}</Text></View>
+      <View style={styles.infoCard}><Text style={styles.infoLabel}>PROTEÇÃO LOCAL</Text><Text style={styles.infoValue}>No dispositivo embarcado</Text></View>
+    </View>
+
+    <SectionTitle title="Eventos recentes" detail="Registros do backend" />
+    {events.length ? events.slice(0, 3).map((event) => <EventRow key={event.id} event={event} />) :
+      <View style={styles.emptyInline}><Text style={styles.emptyText}>Nenhum evento registrado para esta origem.</Text></View>}
+    {error ? <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View> : null}
+    <Pressable onPress={onRefresh} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>{refreshing ? 'Atualizando…' : 'Atualizar dados'}</Text></Pressable>
+    <Text style={styles.disclaimer}>O aplicativo apresenta telemetria e eventos registrados. A indicação de estado da conexão não comprova que a carga esteja ligada ou desligada.</Text>
+  </ScrollView>;
+}
+
+function EventRow({ event }: { event: StationEvent }) {
+  const color = event.level === 'critical' ? colors.danger : event.level === 'alert' ? colors.warning : event.level === 'attention' ? colors.warning : colors.blue;
+  return <View style={styles.eventRow}><View style={[styles.eventRail, { backgroundColor: color }]} /><View style={{ flex: 1 }}><Text style={styles.eventTitle}>{eventName(event.kind)}</Text><Text style={styles.eventMeta}>{levelName(event.level)} · {formatDate(event.receivedAt)}</Text></View></View>;
+}
+
+function History({ readings, mode, loading }: { readings: TelemetryReading[]; mode: Mode; loading: boolean }) {
+  return <ScrollView contentContainerStyle={styles.page}>
+    <SectionTitle title="Histórico de leituras" detail={mode === 'demo' ? 'Sessão de demonstração' : 'Últimos registros do backend'} />
+    {loading ? <ActivityIndicator color={colors.accent} /> : null}
+    {!readings.length && !loading ? <View style={styles.emptyState}><Text style={styles.emptyTitle}>Histórico vazio</Text><Text style={styles.emptyText}>As leituras aparecerão aqui assim que forem recebidas.</Text></View> : null}
+    {readings.map((item) => <View key={item.id} style={styles.historyRow}>
+      <View style={{ flex: 1 }}><Text style={styles.historyDate}>{formatDate(item.measuredAt)}</Text><Text style={styles.historySource}>{sourceName(item.source)} · {item.quality === 'valid' ? 'Válida' : item.quality}</Text></View>
+      <View style={styles.historyValues}><Text style={styles.historyMain}>{item.measurements.currentA == null ? '—' : item.measurements.currentA.toFixed(1) + ' A'}</Text><Text style={styles.historySub}>{item.measurements.voltageV == null ? '—' : item.measurements.voltageV.toFixed(1) + ' V'} · {item.measurements.activePowerW == null ? '—' : Math.round(item.measurements.activePowerW) + ' W'}</Text></View>
+    </View>)}
+  </ScrollView>;
+}
+
+function Events({ events, loading }: { events: StationEvent[]; loading: boolean }) {
+  return <ScrollView contentContainerStyle={styles.page}><SectionTitle title="Central de eventos" detail="Ocorrências retornadas pela API" />
+    {loading ? <ActivityIndicator color={colors.accent} /> : null}
+    {events.length ? events.map((event) => <EventRow key={event.id} event={event} />) :
+      <View style={styles.emptyState}><Text style={styles.emptyTitle}>Tudo tranquilo por aqui</Text><Text style={styles.emptyText}>Nenhum evento foi registrado pelo backend para a estação selecionada.</Text></View>}
+    <Text style={styles.disclaimer}>Os eventos atuais são registros por leitura. Eles não representam, por si só, um comando de desligamento ou confirmação de corte de energia.</Text>
+  </ScrollView>;
+}
+
+function Settings({ mode, setMode, baseUrl, setBaseUrl, readKey, setReadKey, source, setSource, onSave, saving }: {
+  mode: Mode; setMode: (v: Mode) => void; baseUrl: string; setBaseUrl: (v: string) => void;
+  readKey: string; setReadKey: (v: string) => void; source: DataSource; setSource: (v: DataSource) => void;
+  onSave: () => void; saving: boolean;
+}) {
+  return <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+    <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+      <SectionTitle title="Configurações" detail="Conexão e origem dos dados" />
+      <Text style={styles.fieldLabel}>MODO DE OPERAÇÃO</Text>
+      <View style={styles.segment}><Pressable onPress={() => setMode('demo')} style={[styles.segmentButton, mode === 'demo' && styles.segmentActive]}><Text style={[styles.segmentText, mode === 'demo' && styles.segmentTextActive]}>Demonstração</Text></Pressable><Pressable onPress={() => setMode('backend')} style={[styles.segmentButton, mode === 'backend' && styles.segmentActive]}><Text style={[styles.segmentText, mode === 'backend' && styles.segmentTextActive]}>Backend local</Text></Pressable></View>
+      {mode === 'backend' ? <>
+        <Text style={styles.fieldLabel}>ENDEREÇO DA API</Text>
+        <TextInput value={baseUrl} onChangeText={setBaseUrl} autoCapitalize="none" autoCorrect={false} keyboardType="url" placeholder="http://10.0.2.2:8000" placeholderTextColor={colors.subtle} style={styles.input} />
+        <Text style={styles.helper}>Emulador Android: 10.0.2.2. Celular físico: use o IP do computador na rede Wi-Fi.</Text>
+        <Text style={styles.fieldLabel}>CHAVE DE LEITURA (X-API-KEY)</Text>
+        <TextInput value={readKey} onChangeText={setReadKey} autoCapitalize="none" autoCorrect={false} secureTextEntry placeholder="Chave configurada no backend" placeholderTextColor={colors.subtle} style={styles.input} />
+        <Text style={styles.fieldLabel}>ORIGEM DOS DADOS</Text>
+        <View style={styles.segment}><Pressable onPress={() => setSource('simulated')} style={[styles.segmentButton, source === 'simulated' && styles.segmentActive]}><Text style={[styles.segmentText, source === 'simulated' && styles.segmentTextActive]}>Simulador</Text></Pressable><Pressable onPress={() => setSource('sensor')} style={[styles.segmentButton, source === 'sensor' && styles.segmentActive]}><Text style={[styles.segmentText, source === 'sensor' && styles.segmentTextActive]}>Sensores</Text></Pressable></View>
+        <Text style={styles.helper}>O app usa somente a chave de leitura. A chave de dispositivo, usada para enviar telemetria, não deve ser colocada no aplicativo.</Text>
+      </> : <View style={styles.demoNote}><Text style={styles.demoNoteTitle}>Modo independente</Text><Text style={styles.helper}>Gera valores demonstrativos no próprio aplicativo. Não exige backend, internet, Wokwi ou ESP32. Os dados são fictícios e identificados como demonstração.</Text></View>}
+      <View style={styles.configSummary}><Text style={styles.summaryLabel}>ESTAÇÃO</Text><Text style={styles.summaryValue}>{STATION_ID}</Text><Text style={styles.summaryLabel}>ATUALIZAÇÃO</Text><Text style={styles.summaryValue}>A cada 5 segundos</Text></View>
+      <Pressable onPress={onSave} style={styles.primaryButton}><Text style={styles.primaryButtonText}>{saving ? 'Salvando…' : 'Salvar e conectar'}</Text></Pressable>
+    </ScrollView>
+  </KeyboardAvoidingView>;
 }
 
 export default function App() {
-  return (
-    <SQLiteProvider databaseName="chargesense.db" onInit={initializeDatabase}>
-      <TelaPrincipal />
-    </SQLiteProvider>
-  );
+  const [tab, setTab] = useState<Tab>('overview');
+  const [mode, setMode] = useState<Mode>('demo');
+  const [baseUrl, setBaseUrl] = useState(DEFAULT_URL);
+  const [readKey, setReadKey] = useState('');
+  const [source, setSource] = useState<DataSource>('simulated');
+  const [reading, setReading] = useState<TelemetryReading | null>(demoReading(0));
+  const [readings, setReadings] = useState<TelemetryReading[]>([demoReading(0)]);
+  const [status, setStatus] = useState<StationStatus | null>(null);
+  const [events, setEvents] = useState<StationEvent[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [demoSequence, setDemoSequence] = useState(0);
+
+  const config = useMemo<ApiConfig>(() => ({ baseUrl, readKey, stationId: STATION_ID, source }), [baseUrl, readKey, source]);
+
+  const refreshBackend = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const [latestResult, statusResult, historyResult, eventsResult] = await Promise.all([
+        chargesenseApi.latest(config), chargesenseApi.status(config),
+        chargesenseApi.history(config), chargesenseApi.events(config),
+      ]);
+      setReading(latestResult);
+      setStatus(statusResult);
+      setReadings(historyResult.items);
+      setEvents(eventsResult.items);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Falha ao consultar o backend.');
+    } finally { setRefreshing(false); }
+  }, [config]);
+
+  useEffect(() => {
+    if (mode !== 'backend') return;
+    void refreshBackend();
+    const timer = setInterval(() => { void refreshBackend(); }, 5000);
+    return () => clearInterval(timer);
+  }, [mode, refreshBackend]);
+
+  useEffect(() => {
+    if (mode !== 'demo') return;
+    const timer = setInterval(() => {
+      setDemoSequence((current) => {
+        const next = current + 1;
+        const item = demoReading(next);
+        setReading(item);
+        setReadings((previous) => [item, ...previous].slice(0, 30));
+        return next;
+      });
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [mode]);
+
+  function saveSettings() {
+    if (mode === 'backend' && (!baseUrl.trim() || !readKey.trim())) {
+      Alert.alert('Configuração incompleta', 'Informe o endereço da API e a chave de leitura.');
+      return;
+    }
+    setTab('overview');
+    if (mode === 'backend') void refreshBackend();
+    else {
+      const item = demoReading(demoSequence);
+      setReading(item); setReadings((previous) => [item, ...previous].slice(0, 30));
+      setError(null); setStatus(null); setEvents([]);
+    }
+  }
+
+  const title = tab === 'overview' ? 'Monitoramento da estação' : tab === 'history' ? 'Leituras registradas' : tab === 'events' ? 'Alertas e ocorrências' : 'Preferências do sistema';
+
+  return <View style={styles.app}>
+    <StatusBar barStyle="light-content" backgroundColor={colors.background} />
+    <Header subtitle={title} />
+    <View style={styles.content}>
+      {tab === 'overview' ? <Overview reading={reading} status={status} mode={mode} refreshing={refreshing} error={error} onRefresh={() => mode === 'backend' ? void refreshBackend() : setDemoSequence((v) => v + 1)} events={events} /> : null}
+      {tab === 'history' ? <History readings={readings} mode={mode} loading={loadingHistory} /> : null}
+      {tab === 'events' ? <Events events={events} loading={false} /> : null}
+      {tab === 'settings' ? <Settings mode={mode} setMode={setMode} baseUrl={baseUrl} setBaseUrl={setBaseUrl} readKey={readKey} setReadKey={setReadKey} source={source} setSource={setSource} onSave={saveSettings} saving={refreshing} /> : null}
+    </View>
+    <View style={styles.tabBar}>
+      {([{ id: 'overview', label: 'Visão geral', icon: '◫' }, { id: 'history', label: 'Histórico', icon: '↗' }, { id: 'events', label: 'Eventos', icon: '!' }, { id: 'settings', label: 'Ajustes', icon: '⚙' }] as const).map((item) =>
+        <Pressable key={item.id} onPress={() => setTab(item.id)} style={styles.tabItem}>
+          <View style={[styles.tabIcon, tab === item.id && styles.tabIconActive]}><Text style={[styles.tabIconText, tab === item.id && styles.tabIconTextActive]}>{item.icon}</Text></View>
+          <Text style={[styles.tabLabel, tab === item.id && styles.tabLabelActive]}>{item.label}</Text>
+        </Pressable>)}
+    </View>
+  </View>;
 }
 
 const styles = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: '#f2f5f9', paddingTop: StatusBar.currentHeight ?? 0 },
-  rolagem: { flex: 1 },
-  conteudo: { padding: 20, paddingBottom: 40 },
-  titulo: { fontSize: 28, fontWeight: 'bold', color: '#17345c' },
-  subtitulo: { color: '#5d6b7a', marginBottom: 20 },
-  secao: { fontSize: 19, fontWeight: 'bold', marginTop: 20, marginBottom: 12, color: '#17345c' },
-  data: { color: '#5d6b7a', marginBottom: 10 },
-  linha: { flexDirection: 'row', gap: 10, marginBottom: 10 },
-  cartao: { flex: 1, backgroundColor: 'white', padding: 16, borderRadius: 10, elevation: 2 },
-  rotulo: { color: '#5d6b7a', marginBottom: 8 },
-  valor: { fontSize: 20, fontWeight: 'bold', color: '#17345c' },
-  aviso: { backgroundColor: '#e4edf8', padding: 12, borderRadius: 8, marginTop: 12, color: '#34495e' },
-  botao: { backgroundColor: '#245caa', padding: 14, borderRadius: 8, alignItems: 'center', marginTop: 18 },
-  botaoSimulacao: { backgroundColor: '#187657' },
-  textoBotao: { color: 'white', fontWeight: 'bold' },
-  textoSimulacao: { color: '#5d6b7a', marginTop: 8, textAlign: 'center' },
-  campo: { backgroundColor: 'white', borderWidth: 1, borderColor: '#c5cdd5', borderRadius: 7, padding: 11, marginTop: 5, marginBottom: 12 },
-  itemHistorico: { backgroundColor: 'white', padding: 14, borderRadius: 8, marginBottom: 10 },
-  hora: { fontWeight: 'bold', marginBottom: 5 },
+  app: { flex: 1, backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 12 },
+  brandMark: { width: 38, height: 38, borderRadius: 12, backgroundColor: colors.accentDark, alignItems: 'center', justifyContent: 'center' },
+  brandBolt: { width: 24, height: 24, borderRadius: 8, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
+  brandBoltText: { color: colors.background, fontSize: 17, fontWeight: '900' },
+  brand: { color: colors.text, fontSize: 13, fontWeight: '900', letterSpacing: 1.8 },
+  headerSubtitle: { color: colors.muted, fontSize: 11, marginTop: 3 },
+  headerTag: { borderWidth: 1, borderColor: colors.border, borderRadius: 7, paddingHorizontal: 8, paddingVertical: 5 },
+  headerTagText: { color: colors.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  content: { flex: 1 },
+  page: { padding: 20, paddingBottom: 32, gap: 14 },
+  stationHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  eyebrow: { color: colors.subtle, fontSize: 10, fontWeight: '800', letterSpacing: 1.3 },
+  stationName: { color: colors.text, fontSize: 23, fontWeight: '700', marginTop: 4 },
+  stationId: { color: colors.muted, fontSize: 11, marginTop: 2 },
+  sourceLine: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 2, marginBottom: 4 },
+  sourceDot: { width: 7, height: 7, borderRadius: 8 },
+  sourceText: { color: colors.muted, fontSize: 11 },
+  sourceDivider: { color: colors.subtle, fontSize: 12 },
+  panel: { backgroundColor: '#0B1B2B', borderRadius: 20, borderWidth: 1, borderColor: colors.border, padding: 14, gap: 12 },
+  panelTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
+  panelLabel: { color: colors.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
+  panelTime: { color: colors.subtle, fontSize: 10 },
+  metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  panelFooter: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 11, flexDirection: 'row', justifyContent: 'space-between' },
+  footerLabel: { color: colors.subtle, fontSize: 10, fontWeight: '700', letterSpacing: 0.6 },
+  footerValue: { color: colors.accent, fontSize: 11, fontWeight: '700' },
+  infoRow: { flexDirection: 'row', gap: 10 },
+  infoCard: { flex: 1, backgroundColor: colors.surface, borderRadius: 13, borderWidth: 1, borderColor: colors.border, padding: 12, gap: 7 },
+  infoLabel: { color: colors.subtle, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+  infoValue: { color: colors.text, fontSize: 11, fontWeight: '600' },
+  sectionTitle: { marginTop: 8, marginBottom: 2, gap: 4 },
+  sectionHeading: { color: colors.text, fontSize: 18, fontWeight: '700' },
+  sectionDetail: { color: colors.muted, fontSize: 11 },
+  eventRow: { flexDirection: 'row', backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', minHeight: 64, alignItems: 'center' },
+  eventRail: { width: 3, alignSelf: 'stretch' },
+  eventTitle: { color: colors.text, fontSize: 12, fontWeight: '700', marginLeft: 12, marginTop: 10 },
+  eventMeta: { color: colors.muted, fontSize: 10, marginLeft: 12, marginTop: 4, marginBottom: 10 },
+  emptyState: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 22, alignItems: 'center', gap: 8 },
+  emptyInline: { padding: 12 },
+  emptyTitle: { color: colors.text, fontSize: 14, fontWeight: '700' },
+  emptyText: { color: colors.muted, fontSize: 11, textAlign: 'center', lineHeight: 17 },
+  errorBox: { padding: 12, backgroundColor: colors.dangerSurface, borderRadius: 10, borderWidth: 1, borderColor: '#754047' },
+  errorText: { color: colors.danger, fontSize: 11 },
+  secondaryButton: { padding: 13, alignItems: 'center', borderRadius: 11, borderWidth: 1, borderColor: colors.border },
+  secondaryButtonText: { color: colors.accent, fontSize: 12, fontWeight: '700' },
+  disclaimer: { color: colors.subtle, fontSize: 10, lineHeight: 15, marginTop: 3 },
+  historyRow: { flexDirection: 'row', alignItems: 'center', padding: 14, backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, gap: 10 },
+  historyDate: { color: colors.text, fontSize: 11, fontWeight: '700' },
+  historySource: { color: colors.muted, fontSize: 10, marginTop: 5 },
+  historyValues: { alignItems: 'flex-end', gap: 4 },
+  historyMain: { color: colors.accent, fontSize: 12, fontWeight: '700' },
+  historySub: { color: colors.muted, fontSize: 9 },
+  fieldLabel: { color: colors.muted, fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginTop: 8 },
+  input: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 10, color: colors.text, paddingHorizontal: 13, paddingVertical: 12, fontSize: 13 },
+  helper: { color: colors.subtle, fontSize: 10, lineHeight: 15 },
+  segment: { flexDirection: 'row', backgroundColor: colors.surface, borderRadius: 11, padding: 4, borderWidth: 1, borderColor: colors.border, gap: 4 },
+  segmentButton: { flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
+  segmentActive: { backgroundColor: colors.surfaceRaised },
+  segmentText: { color: colors.muted, fontSize: 11, fontWeight: '600' },
+  segmentTextActive: { color: colors.accent },
+  demoNote: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, padding: 14, borderRadius: 12, gap: 8 },
+  demoNoteTitle: { color: colors.text, fontSize: 13, fontWeight: '700' },
+  configSummary: { padding: 14, backgroundColor: colors.surface, borderRadius: 12, gap: 5 },
+  summaryLabel: { color: colors.subtle, fontSize: 9, fontWeight: '800', letterSpacing: 0.8, marginTop: 4 },
+  summaryValue: { color: colors.text, fontSize: 12 },
+  primaryButton: { backgroundColor: colors.accent, borderRadius: 11, padding: 14, alignItems: 'center' },
+  primaryButtonText: { color: colors.background, fontSize: 12, fontWeight: '800' },
+  tabBar: { flexDirection: 'row', backgroundColor: '#091A29', borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8, paddingBottom: Platform.OS === 'ios' ? 20 : 9 },
+  tabItem: { flex: 1, alignItems: 'center', gap: 4 },
+  tabIcon: { width: 29, height: 25, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  tabIconActive: { backgroundColor: colors.accentDark },
+  tabIconText: { color: colors.subtle, fontSize: 16, fontWeight: '700' },
+  tabIconTextActive: { color: colors.accent },
+  tabLabel: { color: colors.subtle, fontSize: 9, fontWeight: '600' },
+  tabLabelActive: { color: colors.accent },
 });
