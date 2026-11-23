@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView,
-  StatusBar, StyleSheet, Text, TextInput, View,
+  StatusBar, StyleSheet, Text, TextInput, View, useWindowDimensions,
 } from 'react-native';
 import { MetricCard } from './components/MetricCard';
 import { StatusPill } from './components/StatusPill';
@@ -60,6 +60,8 @@ function Overview({ reading, status, mode, refreshing, error, onRefresh, events 
   reading: TelemetryReading | null; status: StationStatus | null; mode: Mode; refreshing: boolean;
   error: string | null; onRefresh: () => void; events: StationEvent[];
 }) {
+  const { width } = useWindowDimensions();
+  const compact = width < 360;
   const m = reading?.measurements;
   const temperatureColor = m?.panelTempC != null && m.panelTempC >= 45 ? colors.warning : colors.text;
   return <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
@@ -76,7 +78,7 @@ function Overview({ reading, status, mode, refreshing, error, onRefresh, events 
 
     <View style={styles.panel}>
       <View style={styles.panelTop}><Text style={styles.panelLabel}>VISÃO GERAL</Text><Text style={styles.panelTime}>{reading ? formatDate(reading.measuredAt) : 'Sem leitura'}</Text></View>
-      {reading ? <View style={styles.metricsGrid}>
+      {reading ? <View style={[styles.metricsGrid, compact && styles.metricsGridCompact]}>
         <MetricCard label="CORRENTE" value={m?.currentA} unit="A" accent={colors.accent} />
         <MetricCard label="TENSÃO" value={m?.voltageV} unit="V" />
         <MetricCard label="POTÊNCIA ATIVA" value={m?.activePowerW} unit="W" precision={0} />
@@ -252,25 +254,26 @@ const styles = StyleSheet.create({
   headerTag: { borderWidth: 1, borderColor: colors.border, borderRadius: 7, paddingHorizontal: 8, paddingVertical: 5 },
   headerTagText: { color: colors.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   content: { flex: 1 },
-  page: { padding: 20, paddingBottom: 32, gap: 14 },
+  page: { padding: 16, paddingBottom: 44, gap: 14 },
   stationHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   eyebrow: { color: colors.subtle, fontSize: 10, fontWeight: '800', letterSpacing: 1.3 },
   stationName: { color: colors.text, fontSize: 23, fontWeight: '700', marginTop: 4 },
   stationId: { color: colors.muted, fontSize: 11, marginTop: 2 },
-  sourceLine: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 2, marginBottom: 4 },
+  sourceLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 7, marginTop: 2, marginBottom: 4 },
   sourceDot: { width: 7, height: 7, borderRadius: 8 },
-  sourceText: { color: colors.muted, fontSize: 11 },
+  sourceText: { color: colors.muted, fontSize: 11, flexShrink: 1 },
   sourceDivider: { color: colors.subtle, fontSize: 12 },
   panel: { backgroundColor: '#0B1B2B', borderRadius: 20, borderWidth: 1, borderColor: colors.border, padding: 14, gap: 12 },
   panelTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
   panelLabel: { color: colors.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
   panelTime: { color: colors.subtle, fontSize: 10 },
   metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  metricsGridCompact: { flexDirection: 'column' },
   panelFooter: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 11, flexDirection: 'row', justifyContent: 'space-between' },
   footerLabel: { color: colors.subtle, fontSize: 10, fontWeight: '700', letterSpacing: 0.6 },
   footerValue: { color: colors.accent, fontSize: 11, fontWeight: '700' },
-  infoRow: { flexDirection: 'row', gap: 10 },
-  infoCard: { flex: 1, backgroundColor: colors.surface, borderRadius: 13, borderWidth: 1, borderColor: colors.border, padding: 12, gap: 7 },
+  infoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  infoCard: { flex: 1, minWidth: '46%', backgroundColor: colors.surface, borderRadius: 13, borderWidth: 1, borderColor: colors.border, padding: 12, gap: 7 },
   infoLabel: { color: colors.subtle, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
   infoValue: { color: colors.text, fontSize: 11, fontWeight: '600' },
   sectionTitle: { marginTop: 8, marginBottom: 2, gap: 4 },
@@ -310,12 +313,12 @@ const styles = StyleSheet.create({
   summaryValue: { color: colors.text, fontSize: 12 },
   primaryButton: { backgroundColor: colors.accent, borderRadius: 11, padding: 14, alignItems: 'center' },
   primaryButtonText: { color: colors.background, fontSize: 12, fontWeight: '800' },
-  tabBar: { flexDirection: 'row', backgroundColor: '#091A29', borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8, paddingBottom: Platform.OS === 'ios' ? 20 : 9 },
+  tabBar: { flexDirection: 'row', backgroundColor: '#091A29', borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8, paddingBottom: Platform.OS === 'ios' ? 24 : 28, minHeight: 72 },
   tabItem: { flex: 1, alignItems: 'center', gap: 4 },
   tabIcon: { width: 29, height: 25, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   tabIconActive: { backgroundColor: colors.accentDark },
   tabIconText: { color: colors.subtle, fontSize: 16, fontWeight: '700' },
   tabIconTextActive: { color: colors.accent },
-  tabLabel: { color: colors.subtle, fontSize: 9, fontWeight: '600' },
+  tabLabel: { color: colors.subtle, fontSize: 9, fontWeight: '600', flexShrink: 1, textAlign: 'center' },
   tabLabelActive: { color: colors.accent },
 });
