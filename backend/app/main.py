@@ -14,6 +14,7 @@ from starlette.responses import JSONResponse
 
 from .models import Telemetry
 from .store import Conflict, Store
+from fastapi.middleware.cors import CORSMiddleware
 
 key_header = APIKeyHeader(name='X-API-Key', auto_error=False)
 
@@ -45,6 +46,14 @@ def create_app(db_path=None, device_key=None, read_key=None, station=None, level
 
     app = FastAPI(title='ChargeSense API local', version='1.0.0', lifespan=lifespan,
                   description='Telemetria local. Sem comandos de corte. Grandezas indisponiveis usam null.')
+    
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # Temporário para o teste de integração
+        allow_credentials=False,
+        allow_methods=["GET"],
+        allow_headers=["X-API-Key", "Content-Type"],
+    )
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request, error):
