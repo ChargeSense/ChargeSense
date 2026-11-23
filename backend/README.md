@@ -63,3 +63,7 @@ python -m unittest discover -s tests -v
 ## Migração futura
 
 O contrato JSON v1 pode ser mantido em uma futura ingestão MQTT/AWS IoT Core. A persistência SQLite é local e não é proposta de banco distribuído. A migração exige provisionamento, identidade, TLS, retenção, limites de taxa e observabilidade.
+
+## Cloudflare Tunnel
+
+Precisa rodar o código no cmd na pasta fonte onde está o cloudflared.exe -> .\cloudflared.exe tunnel --url http://127.0.0.1:8000
