@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from datetime import datetime
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -54,7 +55,15 @@ class Store:
 
     @staticmethod
     def decode(row):
-        return {'id': row['id'], **json.loads(row['canonical']), 'receivedAt': row['received']}
+        data = json.loads(row['canonical'])
+        original = data['measuredAt']
+        corrected = (data['source'] == 'simulated' and row['measured'] is not None
+                     and (original is None or datetime.fromisoformat(original.replace('Z', '+00:00'))
+                          != datetime.fromisoformat(row['measured'])))
+        if corrected:
+            data['measuredAt'] = row['measured']
+        return {'id': row['id'], **data, 'receivedAt': row['received'],
+                'timestampSource': 'backend' if corrected else 'device' if original else 'unknown'}
 
     def insert(self, payload, received, rules):
         data = payload.model_dump(mode='json')
@@ -68,6 +77,13 @@ class Store:
                     raise Conflict('Mesmo identificador com conteudo diferente')
                 return self.decode(row), True
             measured = payload.measuredAt.isoformat(timespec='microseconds') if payload.measuredAt else None
+            # Preserve the submitted canonical payload for retry/conflict checks.
+            # Only the effective time is substituted, once, inside this transaction.
+            if data['source'] == 'simulated' and (
+                    payload.measuredAt is None or
+                    (payload.measuredAt - datetime.fromisoformat(received)).total_seconds() > 30):
+                measured = received
+                data['measuredAt'] = received
             cursor = db.execute('INSERT INTO readings(station,source,boot,sequence,measured,received,canonical) VALUES(?,?,?,?,?,?,?)',
                                 (*key, measured, received, canonical))
             row = db.execute('SELECT * FROM readings WHERE id=?', (cursor.lastrowid,)).fetchone()

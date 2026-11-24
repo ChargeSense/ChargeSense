@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, model_validator
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator, model_validator
 
 NonNegative = Annotated[FiniteFloat, Field(ge=0, le=100000)]
 
@@ -27,6 +27,19 @@ class Telemetry(BaseModel):
     quality: Literal['valid', 'uncalibrated', 'invalid']
     measurements: Measurements
 
+    @field_validator('measuredAt', mode='wrap')
+    @classmethod
+    def tolerate_simulator_clock(cls, value, handler, info):
+        if info.data.get('source') != 'simulated':
+            return handler(value)
+        try:
+            parsed = handler(value)
+        except ValueError:
+            return None
+        if parsed is not None and (parsed.tzinfo is None or parsed.utcoffset() is None):
+            return None
+        return parsed
+
     @model_validator(mode='after')
     def check_semantics(self):
         if self.measuredAt is not None:
@@ -43,3 +56,4 @@ class Telemetry(BaseModel):
         ):
             raise ValueError('Potencia exige tensao e corrente validas')
         return self
+

@@ -114,3 +114,18 @@ Teste manual: conecte o app primeiro; varie 5 → 8 → 10 → 12 → 5 V no Wok
 mantendo cada patamar por pelo menos 10 s. Confira eventos das duas grandezas,
 valor/limite/unidade, ausência de repetição no mesmo patamar e recuperação.
 Pare o backend: o app deve mostrar falha sem manter o status online anterior.
+
+## Horário do simulador
+
+Para source=simulated, measuredAt ausente/null, inválido, sem fuso ou mais de
+30 segundos no futuro recebe o horário UTC do backend no primeiro recebimento.
+GET latest/readings expõem esse horário em measuredAt e timestampSource=backend.
+Horários válidos são preservados (timestampSource=device), inclusive atrasados:
+não é possível distinguir atraso de rede de relógio atrasado com segurança.
+Para usar sempre o relógio do backend no Wokwi, envie measuredAt=null.
+O computador do backend deve estar com data/hora sincronizadas.
+
+Retransmissões mantêm o horário e ID originais e não repetem alertas.
+A origem sensor mantém as validações anteriores; sem horário, timestampSource
+é unknown. Outros erros de payload continuam retornando 422. Não há alteração
+retroativa de leituras antigas nem necessidade de apagar o banco.

@@ -104,7 +104,7 @@ def create_app(db_path=None, device_key=None, read_key=None, station=None, level
     def ingest(payload: Telemetry, response: Response):
         check_station(payload.stationId)
         received = now()
-        if payload.measuredAt and (payload.measuredAt - received).total_seconds() > 30:
+        if payload.source != 'simulated' and payload.measuredAt and (payload.measuredAt - received).total_seconds() > 30:
             raise HTTPException(422, 'Horario de medicao mais de 30 segundos no futuro')
         try:
             reading, duplicate = app.state.store.insert(payload, received.isoformat(timespec='microseconds'), app.state.alert_rules)
