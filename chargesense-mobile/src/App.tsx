@@ -180,8 +180,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [demoSequence, setDemoSequence] = useState(0);
 
-  const [notices, setNotices] = useState<StationEvent[]>([]);
-  const notice = notices[0];
+  const [notice, setNotice] = useState<StationEvent | null>(null);
   const notificationCursor = useRef<number | null>(null);
   const generation = useRef(0);
   const busy = useRef<number | null>(null);
@@ -215,7 +214,8 @@ export default function App() {
       if (notificationCursor.current !== null) {
         const next = eventsResult.items.filter((event) => event.id > notificationCursor.current!
           && ['current_threshold', 'voltage_threshold', 'current_recovered', 'voltage_recovered'].includes(event.kind));
-        if (next.length) setNotices((previous) => [...previous, ...next.sort((a, b) => a.id - b.id)]);
+        // One current banner: a new transition replaces the previous message.
+        if (next.length) setNotice(next.reduce((latest, event) => event.id > latest.id ? event : latest));
       }
       notificationCursor.current = Math.max(notificationCursor.current ?? 0, newestId);
       setReading(latestResult);
@@ -239,7 +239,7 @@ export default function App() {
     generation.current += 1;
     busy.current = null;
     notificationCursor.current = null;
-    setNotices([]); setStatus(null); setEvents([]); setError(null);
+    setNotice(null); setStatus(null); setEvents([]); setError(null);
     setRefreshing(false);
     if (mode !== 'backend') return;
     setReading(null); setReadings([]);
@@ -287,7 +287,7 @@ export default function App() {
       </Text>
       <Text style={{ color: colors.text }}>{eventName(notice.kind)}{eventDetails(notice)}</Text>
       <Text style={{ color: colors.muted }}>{formatDate(notice.receivedAt)}</Text>
-      <Pressable accessibilityRole="button" onPress={() => setNotices((previous) => previous.slice(1))}><Text style={{ color: colors.accent, paddingVertical: 8 }}>Dispensar aviso</Text></Pressable>
+      <Pressable accessibilityRole="button" onPress={() => setNotice(null)}><Text style={{ color: colors.accent, paddingVertical: 8 }}>Dispensar aviso</Text></Pressable>
     </View> : null}
     <View style={styles.content}>
       {tab === 'overview' ? <Overview reading={reading} status={status} mode={mode} refreshing={refreshing} error={error} onRefresh={() => mode === 'backend' ? void refreshBackend() : setDemoSequence((v) => v + 1)} events={events} /> : null}
