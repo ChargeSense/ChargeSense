@@ -34,7 +34,8 @@ export async function enablePush(config: ApiConfig): Promise<Registration> {
   if (!projectId) throw new Error('Configure o projeto Expo/EAS e reinstale o aplicativo conforme o guia de push.');
   await Notifications.setNotificationChannelAsync('chargesense-alerts', {
     name: 'Alertas elétricos', importance: Notifications.AndroidImportance.HIGH,
-    sound: 'default', vibrationPattern: [0, 250, 250, 250],
+    // Omit sound to use Android's default; a string is treated as a custom file.
+    vibrationPattern: [0, 250, 250, 250],
   });
   let permission = await Notifications.getPermissionsAsync();
   if (!permission.granted) permission = await Notifications.requestPermissionsAsync();
