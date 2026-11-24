@@ -16,6 +16,14 @@ class Store:
         with self.connect() as db:
             db.executescript('''
                 PRAGMA journal_mode=WAL;
+                CREATE TABLE IF NOT EXISTS event_details (
+                    event_id INTEGER PRIMARY KEY REFERENCES events(id),
+                    value REAL, threshold REAL, unit TEXT
+                );
+                CREATE TABLE IF NOT EXISTS alert_states (
+                    station TEXT, source TEXT, metric TEXT, state TEXT NOT NULL,
+                    PRIMARY KEY(station, source, metric)
+                );
                 CREATE TABLE IF NOT EXISTS readings (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     station TEXT NOT NULL, source TEXT NOT NULL, boot TEXT NOT NULL,
@@ -48,7 +56,7 @@ class Store:
     def decode(row):
         return {'id': row['id'], **json.loads(row['canonical']), 'receivedAt': row['received']}
 
-    def insert(self, payload, received, event):
+    def insert(self, payload, received, rules):
         data = payload.model_dump(mode='json')
         canonical = json.dumps(data, sort_keys=True, separators=(',', ':'), allow_nan=False)
         with self.connect() as db:
@@ -63,9 +71,10 @@ class Store:
             cursor = db.execute('INSERT INTO readings(station,source,boot,sequence,measured,received,canonical) VALUES(?,?,?,?,?,?,?)',
                                 (*key, measured, received, canonical))
             row = db.execute('SELECT * FROM readings WHERE id=?', (cursor.lastrowid,)).fetchone()
-            if event:
-                db.execute('INSERT INTO events(reading_id,station,source,kind,level,received) VALUES(?,?,?,?,?,?)',
-                           (row['id'], data['stationId'], data['source'], event[0], event[1], received))
+            # Evaluate within the same transaction: duplicates cannot notify twice.
+            newer = db.execute('SELECT 1 FROM readings WHERE station=? AND source=? AND boot=? AND sequence>?', key).fetchone()
+            if not newer:
+                rules.evaluate(db, data, row['id'], received)
             return self.decode(row), False
 
     def latest(self, station, source):
@@ -86,10 +95,11 @@ class Store:
 
     def events(self, station, source, limit, before):
         with self.connect() as db:
-            return [dict(r) for r in db.execute('SELECT id,reading_id AS readingId,kind,level,received AS receivedAt FROM events WHERE station=? AND source=? AND id<? ORDER BY id DESC LIMIT ?',
+            return [dict(r) for r in db.execute('SELECT e.id,e.reading_id AS readingId,e.kind,e.level,e.received AS receivedAt,d.value,d.threshold,d.unit FROM events e LEFT JOIN event_details d ON d.event_id=e.id WHERE e.station=? AND e.source=? AND e.id<? ORDER BY e.id DESC LIMIT ?',
                     (station, source, before, limit)).fetchall()]
 
     def last_received(self, station, source):
         with self.connect() as db:
             row = db.execute('SELECT MAX(received) AS received FROM readings WHERE station=? AND source=?', (station, source)).fetchone()
             return row['received']
+

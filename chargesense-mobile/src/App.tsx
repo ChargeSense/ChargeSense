@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView,
   StatusBar, StyleSheet, Text, TextInput, View, useWindowDimensions,
 } from 'react-native';
 import { MetricCard } from './components/MetricCard';
 import { StatusPill } from './components/StatusPill';
-import { chargesenseApi, type ApiConfig } from './services/api';
+import { chargesenseApi, ApiError, type ApiConfig } from './services/api';
 import { colors } from './theme/tokens';
 import type { DataSource, StationEvent, StationStatus, TelemetryReading } from './types/telemetry';
 
@@ -33,13 +33,20 @@ function formatDate(value: string | null | undefined): string {
 }
 function sourceName(source: DataSource): string { return source === 'sensor' ? 'Sensores' : 'Simulador'; }
 function levelName(level: StationEvent['level']): string {
-  return ({ diagnostic: 'Diagnóstico', attention: 'Atenção', alert: 'Alerta', critical: 'Crítico' })[level];
+  return ({ normal: 'Normalizado', diagnostic: 'Diagnóstico', attention: 'Atenção', alert: 'Alerta', critical: 'Crítico' })[level];
+}
+function eventDetails(event: StationEvent): string {
+  return event.value != null && event.threshold != null
+    ? ` · ${event.value.toFixed(3)} ${event.unit ?? ''} (limite: ${event.threshold.toFixed(3)} ${event.unit ?? ''})` : '';
 }
 function eventName(kind: string): string {
   const names: Record<string, string> = {
     measurement_uncalibrated: 'Medição não calibrada',
     measurement_invalid: 'Medição inválida',
     current_threshold: 'Limite de corrente atingido',
+    voltage_threshold: 'Limite de tensão atingido',
+    current_recovered: 'Corrente normalizada',
+    voltage_recovered: 'Tensão normalizada',
   };
   return names[kind] ?? kind.replace(/_/g, ' ');
 }
@@ -103,7 +110,7 @@ function Overview({ reading, status, mode, refreshing, error, onRefresh, events 
 
 function EventRow({ event }: { event: StationEvent }) {
   const color = event.level === 'critical' ? colors.danger : event.level === 'alert' ? colors.warning : event.level === 'attention' ? colors.warning : colors.blue;
-  return <View style={styles.eventRow}><View style={[styles.eventRail, { backgroundColor: color }]} /><View style={{ flex: 1 }}><Text style={styles.eventTitle}>{eventName(event.kind)}</Text><Text style={styles.eventMeta}>{levelName(event.level)} · {formatDate(event.receivedAt)}</Text></View></View>;
+  return <View style={styles.eventRow}><View style={[styles.eventRail, { backgroundColor: color }]} /><View style={{ flex: 1 }}><Text style={styles.eventTitle}>{eventName(event.kind)}{eventDetails(event)}</Text><Text style={styles.eventMeta}>{levelName(event.level)} · {formatDate(event.receivedAt)}</Text></View></View>;
 }
 
 function History({ readings, mode, loading }: { readings: TelemetryReading[]; mode: Mode; loading: boolean }) {
@@ -123,7 +130,7 @@ function Events({ events, loading }: { events: StationEvent[]; loading: boolean 
     {loading ? <ActivityIndicator color={colors.accent} /> : null}
     {events.length ? events.map((event) => <EventRow key={event.id} event={event} />) :
       <View style={styles.emptyState}><Text style={styles.emptyTitle}>Tudo tranquilo por aqui</Text><Text style={styles.emptyText}>Nenhum evento foi registrado pelo backend para a estação selecionada.</Text></View>}
-    <Text style={styles.disclaimer}>Os eventos atuais são registros por leitura. Eles não representam, por si só, um comando de desligamento ou confirmação de corte de energia.</Text>
+    <Text style={styles.disclaimer}>Os alertas de tensão e corrente registram mudanças de nível. Eles não representam, por si só, um comando de desligamento ou confirmação de corte de energia.</Text>
   </ScrollView>;
 }
 
@@ -168,30 +175,62 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [demoSequence, setDemoSequence] = useState(0);
 
+  const [notice, setNotice] = useState<StationEvent | null>(null);
+  const notificationCursor = useRef<number | null>(null);
+  const generation = useRef(0);
+  const busy = useRef<number | null>(null);
+
   const config = useMemo<ApiConfig>(() => ({ baseUrl, readKey, stationId: STATION_ID, source }), [baseUrl, readKey, source]);
 
   const refreshBackend = useCallback(async () => {
+    if (mode !== 'backend' || busy.current === generation.current) return;
+    const requestGeneration = generation.current;
+    busy.current = requestGeneration;
     setRefreshing(true);
     try {
       const [latestResult, statusResult, historyResult, eventsResult] = await Promise.all([
-        chargesenseApi.latest(config), chargesenseApi.status(config),
+        chargesenseApi.latest(config).catch((e: unknown) => {
+          if (e instanceof ApiError && e.status === 404) return null;
+          throw e;
+        }), chargesenseApi.status(config),
         chargesenseApi.history(config), chargesenseApi.events(config),
       ]);
+      if (requestGeneration !== generation.current) return;
+      const newestId = Math.max(0, ...eventsResult.items.map((event) => event.id));
+      if (notificationCursor.current !== null) {
+        const next = eventsResult.items.find((event) => event.id > notificationCursor.current!
+          && ['current_threshold', 'voltage_threshold', 'current_recovered', 'voltage_recovered'].includes(event.kind));
+        if (next) setNotice(next);
+      }
+      notificationCursor.current = Math.max(notificationCursor.current ?? 0, newestId);
       setReading(latestResult);
       setStatus(statusResult);
       setReadings(historyResult.items);
       setEvents(eventsResult.items);
       setError(null);
     } catch (e) {
+      if (requestGeneration !== generation.current) return;
+      setStatus(null);
       setError(e instanceof Error ? e.message : 'Falha ao consultar o backend.');
-    } finally { setRefreshing(false); }
-  }, [config]);
+    } finally {
+      if (requestGeneration === generation.current) {
+        busy.current = null;
+        setRefreshing(false);
+      }
+    }
+  }, [config, mode]);
 
   useEffect(() => {
+    generation.current += 1;
+    busy.current = null;
+    notificationCursor.current = null;
+    setNotice(null); setStatus(null); setEvents([]); setError(null);
+    setRefreshing(false);
     if (mode !== 'backend') return;
+    setReading(null); setReadings([]);
     void refreshBackend();
     const timer = setInterval(() => { void refreshBackend(); }, 5000);
-    return () => clearInterval(timer);
+    return () => { clearInterval(timer); generation.current += 1; };
   }, [mode, refreshBackend]);
 
   useEffect(() => {
@@ -227,6 +266,14 @@ export default function App() {
   return <View style={styles.app}>
     <StatusBar barStyle="light-content" backgroundColor={colors.background} />
     <Header subtitle={title} />
+    {notice && mode === 'backend' ? <View accessibilityRole="alert" accessibilityLiveRegion="assertive" style={{ padding: 12, backgroundColor: colors.surfaceRaised }}>
+      <Text style={{ color: notice.level === 'critical' ? colors.danger : colors.accent, fontWeight: '700' }}>
+        {levelName(notice.level)} · {sourceName(source)}
+      </Text>
+      <Text style={{ color: colors.text }}>{eventName(notice.kind)}{eventDetails(notice)}</Text>
+      <Text style={{ color: colors.muted }}>{formatDate(notice.receivedAt)}</Text>
+      <Pressable accessibilityRole="button" onPress={() => setNotice(null)}><Text style={{ color: colors.accent, paddingVertical: 8 }}>Dispensar aviso</Text></Pressable>
+    </View> : null}
     <View style={styles.content}>
       {tab === 'overview' ? <Overview reading={reading} status={status} mode={mode} refreshing={refreshing} error={error} onRefresh={() => mode === 'backend' ? void refreshBackend() : setDemoSequence((v) => v + 1)} events={events} /> : null}
       {tab === 'history' ? <History readings={readings} mode={mode} loading={loadingHistory} /> : null}
@@ -322,3 +369,4 @@ const styles = StyleSheet.create({
   tabLabel: { color: colors.subtle, fontSize: 9, fontWeight: '600', flexShrink: 1, textAlign: 'center' },
   tabLabelActive: { color: colors.accent },
 });
+

@@ -12,6 +12,7 @@ from fastapi.security import APIKeyHeader
 from fastapi.exceptions import RequestValidationError
 from starlette.responses import JSONResponse
 
+from .alerts import AlertRules
 from .models import Telemetry
 from .store import Conflict, Store
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,6 +39,7 @@ def create_app(db_path=None, device_key=None, read_key=None, station=None, level
                 not all(math.isfinite(x) and x > 0 for x in configured_levels) or
                 not configured_levels[0] < configured_levels[1] < configured_levels[2]):
             raise RuntimeError('CHARGESENSE_CURRENT_LEVELS exige tres limites positivos crescentes')
+        app.state.alert_rules = AlertRules(configured_levels)
         app.state.device_key, app.state.read_key = write, read
         app.state.station = station or os.getenv('CHARGESENSE_STATION_ID', 'bancada-01')
         app.state.levels = configured_levels
@@ -104,17 +106,8 @@ def create_app(db_path=None, device_key=None, read_key=None, station=None, level
         received = now()
         if payload.measuredAt and (payload.measuredAt - received).total_seconds() > 30:
             raise HTTPException(422, 'Horario de medicao mais de 30 segundos no futuro')
-        event = None
-        if payload.quality != 'valid':
-            event = ('measurement_' + payload.quality, 'diagnostic')
-        elif payload.measurements.currentA is not None and app.state.levels:
-            value = payload.measurements.currentA
-            for bound, level in reversed(list(zip(app.state.levels, ('attention', 'alert', 'critical')))):
-                if value >= bound:
-                    event = ('current_threshold', level)
-                    break
         try:
-            reading, duplicate = app.state.store.insert(payload, received.isoformat(timespec='microseconds'), event)
+            reading, duplicate = app.state.store.insert(payload, received.isoformat(timespec='microseconds'), app.state.alert_rules)
         except Conflict as error:
             raise HTTPException(409, str(error)) from error
         response.status_code = 200 if duplicate else 201
@@ -154,9 +147,10 @@ def create_app(db_path=None, device_key=None, read_key=None, station=None, level
                 'lastReceivedAt': last, 'secondsSinceReception': receipt_age,
                 'measurementAgeSeconds': age, 'freshness': 'unknown' if age is None else 'fresh' if age <= 15 else 'stale',
                 'quality': reading['quality'] if reading else None,
-                'thresholdsConfigured': bool(app.state.levels)}
+                'thresholdsConfigured': bool(app.state.alert_rules.rules)}
 
     return app
 
 
 app = create_app()
+

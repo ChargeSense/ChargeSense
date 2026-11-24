@@ -47,3 +47,14 @@ O celular/emulador e o computador precisam conseguir se comunicar pela rede. Nã
 - `src/components/`: cartões de grandezas e estado de conexão.
 - `src/theme/tokens.ts`: cores e espaçamentos da interface.
 - `src/data/readings.ts`: persistência SQLite da implementação anterior, preservada para evolução do cache local.
+
+
+## Avisos de tensão/corrente
+
+No modo backend, eventos novos de limites geram um banner dentro do aplicativo,
+com nível, origem, valor, limite, unidade e horário de recebimento. Funciona também
+na interface web e não exige permissões de push. O botão Dispensar fecha o aviso;
+a aba Eventos conserva o histórico. A primeira consulta apenas carrega histórico,
+sem notificar retroativamente. Configure as regras seguindo backend/README.md.
+Esta funcionalidade exige o app aberto; não envia notificações do sistema com
+o app fechado. Não representa atuação ou confirmação de desligamento físico.

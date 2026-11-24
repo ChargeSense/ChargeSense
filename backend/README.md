@@ -67,3 +67,50 @@ O contrato JSON v1 pode ser mantido em uma futura ingestão MQTT/AWS IoT Core. A
 ## Cloudflare Tunnel
 
 Precisa rodar o código no cmd na pasta fonte onde está o cloudflared.exe -> .\cloudflared.exe tunnel --url http://127.0.0.1:8000
+
+## Alertas de tensão e corrente (app aberto)
+
+Os limites de sobretensão e sobrecorrente são opcionais e configurados no terminal
+que inicia o backend. Cada lista contém atenção, alerta e crítico, nessa ordem.
+Sem a variável correspondente, a regra fica desativada. Não há limites elétricos
+universais embutidos nem comando de desligamento.
+
+Exemplo **exclusivamente demonstrativo para o Wokwi de 0–12 V / 22 ohms**:
+
+```powershell
+$env:CHARGESENSE_CURRENT_LEVELS = "0.30,0.40,0.50"
+$env:CHARGESENSE_VOLTAGE_LEVELS = "7,9,11"
+$env:CHARGESENSE_CURRENT_HYSTERESIS = "0.02"
+$env:CHARGESENSE_VOLTAGE_HYSTERESIS = "0.3"
+$env:CHARGESENSE_ALERT_HOLD_SECONDS = "4"
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Mantenha as chaves de dispositivo e leitura já configuradas. Reinicie o backend
+após mudar as variáveis. Histerese e permanência têm padrão zero para preservar
+compatibilidade; configure-as como acima para evitar oscilações. As margens são
+em A e V. Para descer de nível, a leitura deve ficar abaixo do limite menos a
+margem. A permanência vale para todas as transições e é medida pelo recebimento;
+um intervalo maior que 15 s, reinicialização do emissor, leitura inválida ou
+valor ausente interrompe a confirmação pendente. Pacotes com medição mais de
+15 s antiga não alteram alertas; sem horário sincronizado, use measuredAt=null.
+
+Eventos são gerados somente nas mudanças de nível, incluindo redução e retorno
+normal. Tensão e corrente são independentes. Estado e eventos ficam na mesma
+transação SQLite e separados por estação/origem. Duplicatas e sequências antigas
+do mesmo boot não repetem nem alteram alertas. O banco existente recebe novas
+tabelas automaticamente, sem apagar leituras. Alterar a configuração reinicia
+a avaliação daquela regra na próxima leitura; eventos antigos são preservados.
+Diagnósticos de qualidade continuam sendo registrados por leitura.
+
+No app, selecione Backend local e Simulador. Após a primeira consulta estabelecer
+a referência, eventos novos mostram um banner dispensável em qualquer aba.
+O banner mostra o evento mais recente dentre os retornados; todos ficam na aba
+Eventos. O app consulta os últimos 30 eventos a cada 5 s: não é uma fila de
+entrega garantida. Reabrir/trocar origem não dispara avisos antigos. Não há push
+com o app fechado nem garantia de execução em segundo plano nesta entrega.
+
+Teste manual: conecte o app primeiro; varie 5 → 8 → 10 → 12 → 5 V no Wokwi,
+mantendo cada patamar por pelo menos 10 s. Confira eventos das duas grandezas,
+valor/limite/unidade, ausência de repetição no mesmo patamar e recuperação.
+Pare o backend: o app deve mostrar falha sem manter o status online anterior.
