@@ -12,6 +12,10 @@
     "android": {
       "package": "com.chargesense.tcc",
       "usesCleartextTraffic": true
-    }
+    },
+    "plugins": [
+      "expo-notifications",
+      "expo-secure-store"
+    ]
   }
 }

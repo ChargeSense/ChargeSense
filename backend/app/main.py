@@ -1,3 +1,5 @@
+import asyncio
+from contextlib import suppress
 import hmac
 import json
 import math
@@ -13,7 +15,8 @@ from fastapi.exceptions import RequestValidationError
 from starlette.responses import JSONResponse
 
 from .alerts import AlertRules
-from .models import Telemetry
+from .models import Telemetry, PushSubscription
+from .push import PushWorker
 from .store import Conflict, Store
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -44,7 +47,13 @@ def create_app(db_path=None, device_key=None, read_key=None, station=None, level
         app.state.station = station or os.getenv('CHARGESENSE_STATION_ID', 'bancada-01')
         app.state.levels = configured_levels
         app.state.store = Store(db_path or os.getenv('CHARGESENSE_DB', str(Path(__file__).resolve().parents[1] / 'data' / 'chargesense.db')))
-        yield
+        task = asyncio.create_task(PushWorker(app.state.store).run())
+        try:
+            yield
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
     app = FastAPI(title='ChargeSense API local', version='1.0.0', lifespan=lifespan,
                   description='Telemetria local. Sem comandos de corte. Grandezas indisponiveis usam null.')
@@ -53,7 +62,7 @@ def create_app(db_path=None, device_key=None, read_key=None, station=None, level
         CORSMiddleware,
         allow_origins=["*"],  # Temporário para o teste de integração
         allow_credentials=False,
-        allow_methods=["GET"],
+        allow_methods=["GET", "POST"],
         allow_headers=["X-API-Key", "Content-Type"],
     )
 
@@ -112,6 +121,24 @@ def create_app(db_path=None, device_key=None, read_key=None, station=None, level
             raise HTTPException(409, str(error)) from error
         response.status_code = 200 if duplicate else 201
         return {'id': reading['id'], 'duplicate': duplicate, 'receivedAt': reading['receivedAt']}
+
+    @app.post('/api/v1/stations/{station_id}/push-subscriptions',
+              tags=['Notificacoes'], dependencies=[Depends(read_auth)])
+    def subscribe(station_id: str, payload: PushSubscription):
+        check_station(station_id)
+        with app.state.store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            # Re-registration switches source without leaving old pending notices.
+            old = db.execute('SELECT station,source FROM push_devices WHERE token=?', (payload.token,)).fetchone()
+            if not payload.enabled or (old and (old['station'], old['source']) != (station_id, payload.source)):
+                db.execute("DELETE FROM push_jobs WHERE token=? AND phase IN ('send','receipt')",
+                           (payload.token,))
+            if payload.enabled:
+                db.execute('INSERT OR REPLACE INTO push_devices(token,station,source) VALUES(?,?,?)',
+                           (payload.token, station_id, payload.source))
+            else:
+                db.execute('DELETE FROM push_devices WHERE token=?', (payload.token,))
+        return {'enabled': payload.enabled, 'source': payload.source}
 
     @app.get('/api/v1/stations/{station_id}/latest', tags=['Consulta'], dependencies=[Depends(read_auth)])
     def latest(station_id: str, source: Literal['sensor', 'simulated'] = 'sensor'):

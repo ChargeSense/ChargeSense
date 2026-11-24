@@ -3,6 +3,7 @@ import sqlite3
 from datetime import datetime
 from contextlib import contextmanager
 from pathlib import Path
+from .push import initialize, enqueue
 
 
 class Conflict(Exception):
@@ -41,6 +42,8 @@ class Store:
                 );
                 CREATE INDEX IF NOT EXISTS events_station ON events(station, source, id);
             ''')
+
+            initialize(db)
 
     @contextmanager
     def connect(self):
@@ -91,6 +94,7 @@ class Store:
             newer = db.execute('SELECT 1 FROM readings WHERE station=? AND source=? AND boot=? AND sequence>?', key).fetchone()
             if not newer:
                 rules.evaluate(db, data, row['id'], received)
+                enqueue(db, row['id'])
             return self.decode(row), False
 
     def latest(self, station, source):

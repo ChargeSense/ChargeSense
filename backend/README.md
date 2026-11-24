@@ -108,8 +108,8 @@ No app, selecione Backend local e Simulador. Após a primeira consulta estabelec
 a referência, eventos novos mostram um banner dispensável em qualquer aba.
 O banner mostra o evento mais recente dentre os retornados; todos ficam na aba
 Eventos. O app consulta os últimos 30 eventos a cada 5 s: não é uma fila de
-entrega garantida. Reabrir/trocar origem não dispara avisos antigos. Não há push
-com o app fechado nem garantia de execução em segundo plano nesta entrega.
+entrega garantida. Reabrir/trocar origem não dispara avisos antigos. Para push com Android fechado, siga chargesense-mobile/PUSH_SETUP.md.
+Banners e push têm fluxos de entrega separados.
 
 Teste manual: conecte o app primeiro; varie 5 → 8 → 10 → 12 → 5 V no Wokwi,
 mantendo cada patamar por pelo menos 10 s. Confira eventos das duas grandezas,
@@ -130,3 +130,9 @@ Retransmissões mantêm o horário e ID originais e não repetem alertas.
 A origem sensor mantém as validações anteriores; sem horário, timestampSource
 é unknown. Outros erros de payload continuam retornando 422. Não há alteração
 retroativa de leituras antigas nem necessidade de apagar o banco.
+
+## Push Android
+
+Consulte [configuração de push](../chargesense-mobile/PUSH_SETUP.md). O backend
+inicia automaticamente o worker da fila. Nenhum envio ocorre sem um celular
+cadastrado. Instale requirements.txt após atualizar.

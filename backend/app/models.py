@@ -57,3 +57,10 @@ class Telemetry(BaseModel):
             raise ValueError('Potencia exige tensao e corrente validas')
         return self
 
+
+
+class PushSubscription(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    token: Annotated[str, Field(pattern=r'^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$', max_length=256)]
+    source: Literal['sensor', 'simulated']
+    enabled: bool = True

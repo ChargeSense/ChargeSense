@@ -56,8 +56,8 @@ com nível, origem, valor, limite, unidade e horário de recebimento. Funciona t
 na interface web e não exige permissões de push. O botão Dispensar fecha o aviso;
 a aba Eventos conserva o histórico. A primeira consulta apenas carrega histórico,
 sem notificar retroativamente. Configure as regras seguindo backend/README.md.
-Esta funcionalidade exige o app aberto; não envia notificações do sistema com
-o app fechado. Não representa atuação ou confirmação de desligamento físico.
+Os banners exigem o app aberto. Para push com o Android fechado, consulte
+[PUSH_SETUP.md](PUSH_SETUP.md). Não representa atuação ou confirmação de desligamento físico.
 
 Cores de eventos e banners: atenção amarela, alerta laranja, crítico vermelho e
 normalizado verde. Novos avisos ocorrem em agravamentos ou retorno ao normal;

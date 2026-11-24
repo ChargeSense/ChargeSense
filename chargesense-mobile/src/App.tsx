@@ -3,6 +3,7 @@ import {
   ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView,
   StatusBar, StyleSheet, Text, TextInput, View, useWindowDimensions,
 } from 'react-native';
+import { PushSettings } from './components/PushSettings';
 import { MetricCard } from './components/MetricCard';
 import { StatusPill } from './components/StatusPill';
 import { chargesenseApi, ApiError, type ApiConfig } from './services/api';
@@ -159,6 +160,7 @@ function Settings({ mode, setMode, baseUrl, setBaseUrl, readKey, setReadKey, sou
         <Text style={styles.helper}>O app usa somente a chave de leitura. A chave de dispositivo, usada para enviar telemetria, não deve ser colocada no aplicativo.</Text>
       </> : <View style={styles.demoNote}><Text style={styles.demoNoteTitle}>Modo independente</Text><Text style={styles.helper}>Gera valores demonstrativos no próprio aplicativo. Não exige backend, internet, Wokwi ou ESP32. Os dados são fictícios e identificados como demonstração.</Text></View>}
       <View style={styles.configSummary}><Text style={styles.summaryLabel}>ESTAÇÃO</Text><Text style={styles.summaryValue}>{STATION_ID}</Text><Text style={styles.summaryLabel}>ATUALIZAÇÃO</Text><Text style={styles.summaryValue}>A cada 5 segundos</Text></View>
+      <PushSettings backend={mode === 'backend'} config={{ baseUrl, readKey, source, stationId: STATION_ID }} />
       <Pressable onPress={onSave} style={styles.primaryButton}><Text style={styles.primaryButtonText}>{saving ? 'Salvando…' : 'Salvar e conectar'}</Text></Pressable>
     </ScrollView>
   </KeyboardAvoidingView>;

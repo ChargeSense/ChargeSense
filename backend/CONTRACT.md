@@ -82,3 +82,11 @@ retroativa de leituras antigas nem necessidade de apagar o banco.
 
 Reduções entre níveis de perigo não geram eventos; o estado é atualizado para
 avaliar futuras subidas. O retorno ao normal gera recuperação.
+
+## Cadastro push
+
+POST /api/v1/stations/{station_id}/push-subscriptions, com chave de leitura.
+Body: {"token":"ExponentPushToken[...]","source":"simulated","enabled":true}.
+enabled=false remove a assinatura e os jobs pendentes. Um token tem uma origem
+ativa por backend; atualizar muda essa origem sem enviar histórico.
+A resposta expõe apenas enabled/source, nunca tokens de outros dispositivos.
