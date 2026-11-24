@@ -1,0 +1,5 @@
+{
+    "cmake.sourceDirectory": "C:/Users/felipe/source/repos/PFC/ChargeSense/firmware/esp32",
+    "python-envs.defaultEnvManager": "ms-python.python:system",
+    "python-envs.defaultPackageManager": "ms-python.python:pip"
+}

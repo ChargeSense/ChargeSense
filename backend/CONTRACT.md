@@ -52,3 +52,41 @@ Status.connection: never_seen, online ou offline; online = nova mensagem recebid
 Status.freshness: fresh/stale/unknown, pelo horário de medição e limiar de 15 s. Pacote atrasado pode indicar online com leitura stale. Sem measuredAt, frescor e idade desconhecidos. Futuro app deve mostrar horário e qualidade, sem transformar desconexão em zero.
 
 Eventos: measurement_uncalibrated, measurement_invalid ou current_threshold. Incluem readingId, kind, level e receivedAt. São registros por leitura, não comandos de corte. Filtrados por source.
+
+
+## Extensão de eventos de limites
+
+`current_threshold` e `voltage_threshold` indicam aumentos de gravidade para níveis attention,
+alert ou critical. `current_recovered` e `voltage_recovered` usam level `normal`.
+Eventos novos de limites incluem `value`, `threshold` e `unit` (A/V). Em recuperação,
+threshold é a fronteira de retorno (primeiro limite menos histerese). Eventos
+antigos/diagnósticos podem ter esses campos null. Consumidores devem aceitar o
+novo nível normal. thresholdsConfigured é true quando há regra de corrente OU
+tensão. Eventos de limites agora são transições persistidas, não um evento por
+leitura. Consulte o README para configuração, permanência e limites da entrega.
+
+## Horário do simulador
+
+Para source=simulated, measuredAt ausente/null, inválido, sem fuso ou mais de
+30 segundos no futuro recebe o horário UTC do backend no primeiro recebimento.
+GET latest/readings expõem esse horário em measuredAt e timestampSource=backend.
+Horários válidos são preservados (timestampSource=device), inclusive atrasados:
+não é possível distinguir atraso de rede de relógio atrasado com segurança.
+Para usar sempre o relógio do backend no Wokwi, envie measuredAt=null.
+O computador do backend deve estar com data/hora sincronizadas.
+
+Retransmissões mantêm o horário e ID originais e não repetem alertas.
+A origem sensor mantém as validações anteriores; sem horário, timestampSource
+é unknown. Outros erros de payload continuam retornando 422. Não há alteração
+retroativa de leituras antigas nem necessidade de apagar o banco.
+
+Reduções entre níveis de perigo geram eventos internos, mas não entram na fila push.
+O retorno ao normal gera evento interno e push.
+
+## Cadastro push
+
+POST /api/v1/stations/{station_id}/push-subscriptions, com chave de leitura.
+Body: {"token":"ExponentPushToken[...]","source":"simulated","enabled":true}.
+enabled=false remove a assinatura e os jobs pendentes. Um token tem uma origem
+ativa por backend; atualizar muda essa origem sem enviar histórico.
+A resposta expõe apenas enabled/source, nunca tokens de outros dispositivos.

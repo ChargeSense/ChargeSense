@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "ChargeSense",
-    "slug": "chargesense-mobile",
+    "slug": "chargesense",
     "scheme": "chargesense",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -10,8 +10,17 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.chargesense.tcc",
+      "package": "com.chargesense",
       "usesCleartextTraffic": true
+    },
+    "plugins": [
+      "expo-notifications",
+      "expo-secure-store"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "454ef9f0-86ba-451c-9459-91cd6cba5b65"
+      }
     }
   }
 }

@@ -152,6 +152,51 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(codes.count(201), 1)
         self.assertEqual(codes.count(200), 7)
 
+    def test_simulator_clock_fallback(self):
+        for seq, value in enumerate([None, 'bad', '2026-11-16T15:00:00',
+                                    (self.clock + timedelta(hours=2)).isoformat()]):
+            self.payload.update(source='simulated', sequence=seq, measuredAt=value)
+            first = self.post()
+            self.assertEqual(first.status_code, 201)
+            row = self.get('latest?source=simulated').json()
+            self.assertEqual(row['measuredAt'], first.json()['receivedAt'])
+            self.assertEqual(row['timestampSource'], 'backend')
+            self.clock += timedelta(seconds=60)
+            retry = self.post()
+            self.assertEqual(retry.status_code, 200)
+            self.assertEqual(retry.json()['receivedAt'], first.json()['receivedAt'])
+            self.assertEqual(self.get('status?source=simulated').json()['freshness'], 'stale')
+        self.payload['measurements']['currentA'] = 0.7
+        self.assertEqual(self.post().status_code, 409)
+
+    def test_simulator_valid_times_and_validation(self):
+        self.payload['source'] = 'simulated'
+        for seq, offset in enumerate((30, 0, -3600)):
+            self.payload.update(sequence=seq, measuredAt=(self.clock + timedelta(seconds=offset)).isoformat())
+            self.assertEqual(self.post().status_code, 201)
+            row = self.get('latest?source=simulated').json()
+            self.assertEqual(datetime.fromisoformat(row['measuredAt'].replace('Z', '+00:00')),
+                             datetime.fromisoformat(self.payload['measuredAt']))
+            self.assertEqual(row['timestampSource'], 'device')
+        self.payload.update(sequence=5, measuredAt='bad')
+        self.payload['measurements']['currentA'] = -1
+        self.assertEqual(self.post().status_code, 422)
+
+    def test_simulator_omitted_clock_persisted_and_alerts(self):
+        self.payload['source'] = 'simulated'
+        self.payload['measurements']['currentA'] = 3.5
+        del self.payload['measuredAt']
+        first = self.post()
+        self.assertEqual(first.status_code, 201)
+        with TestClient(create_app(self.path, WRITE, READ, levels=(1, 2, 3))) as client:
+            retry = client.post('/api/v1/telemetry', json=self.payload, headers=self.write)
+            self.assertEqual(retry.status_code, 200)
+            self.assertEqual(retry.json()['receivedAt'], first.json()['receivedAt'])
+            rows = client.get('/api/v1/stations/bancada-01/readings?source=simulated',
+                              headers=self.read).json()['items']
+            self.assertEqual(rows[0]['measuredAt'], first.json()['receivedAt'])
+        self.assertEqual(len(self.get('events?source=simulated').json()['items']), 1)
+
     def test_unsafe_configuration_rejected(self):
         with self.assertRaises(RuntimeError):
             with TestClient(create_app(self.path, WRITE, WRITE)):
@@ -160,3 +205,4 @@ class ApiTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

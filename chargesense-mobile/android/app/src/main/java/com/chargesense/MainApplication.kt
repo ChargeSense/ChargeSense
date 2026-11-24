@@ -1,4 +1,4 @@
-package com.chargesense.tcc
+package com.chargesense
 
 import android.app.Application
 import android.content.res.Configuration

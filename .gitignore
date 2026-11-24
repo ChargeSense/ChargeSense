@@ -1,0 +1,9 @@
+# Local notification credentials
+**/google-services.json
+**/*firebase-adminsdk*.json
+**/service-account*.json
+
+# Local configuration (examples remain versioned)
+.env
+.env.*
+!.env.example

@@ -40,8 +40,12 @@ export type StationEvent = {
   id: number;
   readingId: number;
   kind: string;
-  level: 'diagnostic' | 'attention' | 'alert' | 'critical';
+  value?: number | null;
+  threshold?: number | null;
+  unit?: string | null;
+  level: 'normal' | 'diagnostic' | 'attention' | 'alert' | 'critical';
   receivedAt: string;
 };
 
 export type Page<T> = { items: T[]; nextBeforeId: number | null };
+

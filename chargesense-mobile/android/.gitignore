@@ -7,11 +7,9 @@
 build/
 .idea
 .gradle
-.kotlin/
 local.properties
 *.iml
 *.hprof
-*.keystore
 .cxx/
 
 # generated inline modules

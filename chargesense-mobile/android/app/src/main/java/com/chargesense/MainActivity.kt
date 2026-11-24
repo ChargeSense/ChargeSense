@@ -1,4 +1,4 @@
-package com.chargesense.tcc
+package com.chargesense
 
 import android.os.Build
 import android.os.Bundle

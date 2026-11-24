@@ -52,6 +52,6 @@ export const chargesenseApi = {
     request<StationStatus>(config, `${stationPath(config)}/status?source=${config.source}`),
   history: (config: ApiConfig) =>
     request<Page<TelemetryReading>>(config, `${stationPath(config)}/readings?source=${config.source}&limit=30`),
-  events: (config: ApiConfig) =>
-    request<Page<StationEvent>>(config, `${stationPath(config)}/events?source=${config.source}&limit=30`),
+  events: (config: ApiConfig, beforeId?: number) =>
+    request<Page<StationEvent>>(config, `${stationPath(config)}/events?source=${config.source}&limit=30${beforeId == null ? '' : `&before_id=${beforeId}`}`),
 };
