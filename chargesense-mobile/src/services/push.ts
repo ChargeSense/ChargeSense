@@ -55,3 +55,52 @@ export async function disablePush(): Promise<void> {
   if (old) await subscribe(old, false);
   await SecureStore.deleteItemAsync(KEY);
 }
+
+
+export async function diagnosePush(test = false): Promise<string> {
+  const saved = await savedRegistration();
+  if (!saved) throw new Error('Permissão Android não basta: toque em Ativar notificações primeiro.');
+  const permission = await Notifications.getPermissionsAsync();
+  const channel = await Notifications.getNotificationChannelAsync('chargesense-alerts');
+  if (!permission.granted || channel?.importance === Notifications.AndroidImportance.NONE) {
+    throw new Error('Notificações ou canal Alertas elétricos estão bloqueados no Android.');
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const { config, token } = saved;
+    const path = test ? 'push-test' : 'push-diagnostics';
+    const response = await fetch(`${config.baseUrl}/api/v1/stations/${encodeURIComponent(config.stationId)}/${path}`, {
+      method: 'POST', signal: controller.signal,
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': config.readKey },
+      body: JSON.stringify({ token, source: config.source }),
+    });
+    if (!response.ok) throw new Error(`Diagnóstico HTTP ${response.status}. Confira backend atualizado, endereço e chave do registro salvo.`);
+    if (test) return 'Teste agendado. Vá à tela inicial do Android agora; o envio ocorrerá após 15 segundos.';
+    const info = await response.json() as {
+      registered: boolean; source: string | null; workerRunning: boolean;
+      lastJob: { id: number; phase: string; error: string | null; attempts: number } | null;
+    };
+    if (!info.registered) return 'Dispositivo não cadastrado no backend. Atualize o registro de notificações.';
+    if (!info.workerRunning) return 'Worker push parado. Reinicie o backend e confira seu terminal.';
+    if (!info.lastJob) return `Registro ativo (${info.source}), mas nenhum push foi enfileirado. Use Testar notificação.`;
+    const job = info.lastJob;
+    const hints: Record<string, string> = {
+      InvalidCredentials: 'Confira a chave FCM V1 no Expo para com.chargesense.',
+      MismatchSenderId: 'A chave FCM no Expo e google-services.json devem pertencer ao mesmo Firebase.',
+      DeviceNotRegistered: 'Atualize o registro para obter um token válido.',
+      HTTP401: 'Confira CHARGESENSE_EXPO_ACCESS_TOKEN e a segurança push no Expo.',
+      HTTP403: 'Confira autorização e credenciais do Expo.',
+      ConnectError: 'O backend não conseguiu conectar ao Expo. Confira internet, proxy e firewall.',
+      ReadTimeout: 'O Expo não respondeu a tempo; haverá novas tentativas se aplicável.',
+    };
+    const phases: Record<string, string> = {
+      send: 'Aguardando envio/tentativa',
+      receipt: 'Aceito pela Expo; aguardando recibo (consulta em cerca de 15 minutos)',
+      done: 'Aceito pelo provedor; isto não confirma exibição no Android',
+      failed: 'Envio falhou',
+    };
+    return `Job ${job.id}: ${phases[job.phase] ?? job.phase}. Tentativas: ${job.attempts}.` +
+      (job.error ? ` Erro: ${job.error}. ${hints[job.error] ?? 'Confira o terminal do backend.'}` : '');
+  } finally { clearTimeout(timeout); }
+}

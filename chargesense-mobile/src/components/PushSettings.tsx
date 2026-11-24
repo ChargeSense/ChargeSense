@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Platform, Pressable, Text, View } from 'react-native';
 import type { ApiConfig } from '../services/api';
-import { disablePush, enablePush, savedRegistration, type Registration } from '../services/push';
+import { diagnosePush, disablePush, enablePush, savedRegistration, type Registration } from '../services/push';
 import { colors } from '../theme/tokens';
 
 export function PushSettings({ config, backend }: { config: ApiConfig; backend: boolean }) {
@@ -18,6 +18,12 @@ export function PushSettings({ config, backend }: { config: ApiConfig; backend: 
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Falha ao configurar notificações.'); }
     finally { setBusy(false); }
   }
+  async function diagnose(test: boolean) {
+    setBusy(true);
+    try { setMessage(await diagnosePush(test)); }
+    catch (error) { setMessage(error instanceof Error ? error.message : 'Falha ao consultar push.'); }
+    finally { setBusy(false); }
+  }
   return <View style={{ gap: 10, paddingVertical: 16 }}>
     <Text style={{ color: colors.text, fontWeight: '700' }}>Notificações com o app fechado</Text>
     <Text style={{ color: colors.muted }}>{saved
@@ -28,6 +34,10 @@ export function PushSettings({ config, backend }: { config: ApiConfig; backend: 
       <Text style={{ color: backend ? colors.accent : colors.muted }}>{busy ? 'Aguarde…' : saved ? 'Atualizar registro de notificações' : 'Ativar notificações'}</Text>
     </Pressable>
     {saved ? <Pressable disabled={busy} onPress={() => void change(false)}><Text style={{ color: colors.danger }}>Desativar notificações</Text></Pressable> : null}
+    {saved ? <>
+      <Pressable disabled={busy} onPress={() => void diagnose(true)}><Text style={{ color: colors.accent }}>Testar notificação em 15 segundos</Text></Pressable>
+      <Pressable disabled={busy} onPress={() => void diagnose(false)}><Text style={{ color: colors.accent }}>Verificar entrega de notificações</Text></Pressable>
+    </> : null}
     {message ? <Text accessibilityLiveRegion="polite" style={{ color: colors.text }}>{message}</Text> : null}
   </View>;
 }

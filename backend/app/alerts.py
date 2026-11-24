@@ -31,11 +31,11 @@ class AlertRules:
 
     def evaluate(self, db, data, reading_id, received):
         station, source = data['stationId'], data['source']
-        def emit(kind, level, value=None, threshold=None, unit=None):
+        def emit(kind, level, value=None, threshold=None, unit=None, push_eligible=True):
             cursor = db.execute('INSERT INTO events(reading_id,station,source,kind,level,received) VALUES(?,?,?,?,?,?)',
                        (reading_id, station, source, kind, level, received))
-            db.execute('INSERT INTO event_details(event_id,value,threshold,unit) VALUES(?,?,?,?)',
-                       (cursor.lastrowid, value, threshold, unit))
+            db.execute('INSERT INTO event_details(event_id,value,threshold,unit,push_eligible) VALUES(?,?,?,?,?)',
+                       (cursor.lastrowid, value, threshold, unit, int(push_eligible)))
         if data['quality'] != 'valid':
             emit('measurement_' + data['quality'], 'diagnostic')
         for metric, (bounds, margin) in self.rules.items():
@@ -68,12 +68,11 @@ class AlertRules:
                         pending = [target, stamp]
                     state['pending'] = pending
                     if stamp - pending[1] >= self.hold:
-                        # Track improvements silently; notify escalation or full recovery.
-                        if target > previous or target == 0:
-                            emit(metric + ('_recovered' if target == 0 else '_threshold'),
-                                 'normal' if target == 0 else LEVELS[target], value,
-                                 bounds[target - 1] if target else bounds[0] - margin,
-                                 'A' if metric == 'current' else 'V')
+                        emit(metric + ('_recovered' if target == 0 else '_threshold'),
+                             'normal' if target == 0 else LEVELS[target], value,
+                             bounds[target - 1] if target else bounds[0] - margin,
+                             'A' if metric == 'current' else 'V',
+                             push_eligible=target > previous or target == 0)
                         state['level'] = target
                         state.pop('pending', None)
                 state['last'] = stamp

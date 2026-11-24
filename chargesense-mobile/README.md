@@ -60,5 +60,5 @@ Os banners exigem o app aberto. Para push com o Android fechado, consulte
 [PUSH_SETUP.md](PUSH_SETUP.md). Não representa atuação ou confirmação de desligamento físico.
 
 Cores de eventos e banners: atenção amarela, alerta laranja, crítico vermelho e
-normalizado verde. Novos avisos ocorrem em agravamentos ou retorno ao normal;
-reduções intermediárias são silenciosas. Eventos antigos permanecem no histórico.
+normalizado verde. Avisos internos ocorrem em todas as mudanças; push somente em agravamentos ou
+retorno ao normal. Eventos antigos permanecem no histórico.

@@ -109,7 +109,7 @@ class AlertTest(test_api.ApiTest):
         self.assertEqual(len(self.get('events').json()['items']), 1)
 
 
-    def test_downgrades_are_silent_but_reescalation_notifies(self):
+    def test_all_transitions_are_events(self):
         # Both metrics: normal -> critical -> alert -> attention -> alert -> normal.
         for current, voltage in [(0.5, 7), (3.5, 12), (2.5, 10.5),
                                  (1.5, 8.5), (2.5, 10.5), (0.5, 7)]:
@@ -118,12 +118,12 @@ class AlertTest(test_api.ApiTest):
         for metric in ('current', 'voltage'):
             self.assertEqual([e['level'] for e in reversed(events)
                               if e['kind'].startswith(metric)],
-                             ['critical', 'alert', 'normal'])
+                             ['critical', 'alert', 'attention', 'alert', 'normal'])
 
-    def test_silent_downgrade_persists_across_restart(self):
+    def test_downgrade_persists_across_restart(self):
         self.send(3.5)
         self.send(1.5)
-        self.assertEqual(len(self.get('events').json()['items']), 1)
+        self.assertEqual(len(self.get('events').json()['items']), 2)
         with TestClient(create_app(self.path, WRITE, READ, levels=(1, 2, 3),
                                   now=lambda: self.clock)) as client:
             self.payload['sequence'] += 1
@@ -131,4 +131,4 @@ class AlertTest(test_api.ApiTest):
             self.assertEqual(client.post('/api/v1/telemetry', json=self.payload,
                                          headers=self.write).status_code, 201)
         self.assertEqual([e['level'] for e in self.get('events').json()['items']],
-                         ['alert', 'critical'])
+                         ['alert', 'attention', 'critical'])

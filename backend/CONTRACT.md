@@ -80,8 +80,8 @@ A origem sensor mantém as validações anteriores; sem horário, timestampSourc
 é unknown. Outros erros de payload continuam retornando 422. Não há alteração
 retroativa de leituras antigas nem necessidade de apagar o banco.
 
-Reduções entre níveis de perigo não geram eventos; o estado é atualizado para
-avaliar futuras subidas. O retorno ao normal gera recuperação.
+Reduções entre níveis de perigo geram eventos internos, mas não entram na fila push.
+O retorno ao normal gera evento interno e push.
 
 ## Cadastro push
 

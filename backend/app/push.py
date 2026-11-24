@@ -26,6 +26,10 @@ def initialize(db):
         CREATE INDEX IF NOT EXISTS push_due ON push_jobs(phase, due);
     ''')
 
+    columns = {row[1] for row in db.execute('PRAGMA table_info(event_details)')}
+    if 'push_eligible' not in columns:
+        db.execute('ALTER TABLE event_details ADD COLUMN push_eligible INTEGER NOT NULL DEFAULT 1')
+
 
 def enqueue(db, reading_id):
     for event in db.execute('SELECT * FROM events WHERE reading_id=?', (reading_id,)).fetchall():
@@ -34,6 +38,8 @@ def enqueue(db, reading_id):
         metric = 'Tensão' if event['kind'].startswith('voltage') else 'Corrente'
         level = {'attention': 'Atenção', 'alert': 'Alerta', 'critical': 'Crítico', 'normal': 'Normalizado'}[event['level']]
         details = db.execute('SELECT * FROM event_details WHERE event_id=?', (event['id'],)).fetchone()
+        if not details['push_eligible']:
+            continue
         body = f"{metric}: {details['value']:.3f} {details['unit']}. Estação {event['station']} ({event['source']})."
         for device in db.execute('SELECT token FROM push_devices WHERE station=? AND source=?',
                                  (event['station'], event['source'])).fetchall():
@@ -101,7 +107,7 @@ class PushWorker:
         except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError) as error:
             permanent = isinstance(error, httpx.HTTPStatusError) and 400 <= error.response.status_code < 500 and error.response.status_code != 429
             self.finish(job, 'failed' if permanent or job['attempts'] >= 8 else job['phase'],
-                        error=type(error).__name__, delay=min(300, 2 ** (job['attempts']+1)))
+                        error=f'HTTP{error.response.status_code}' if isinstance(error, httpx.HTTPStatusError) else type(error).__name__, delay=min(300, 2 ** (job['attempts']+1)))
         return True
 
     async def run(self):

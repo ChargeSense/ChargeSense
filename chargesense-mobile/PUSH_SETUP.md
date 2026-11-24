@@ -62,7 +62,7 @@ CHARGESENSE_EXPO_ACCESS_TOKEN somente no terminal do backend.
 4. Envie valores normais, feche o app normalmente ou bloqueie a tela e provoque
    um agravamento com medições válidas. Para Wokwi, use measuredAt=null.
 5. Espere a chegada da notificação na bandeja do Android; depois retorne ao normal.
-6. Reduções intermediárias não devem notificar; tensão e corrente são independentes.
+6. Reduções intermediárias notificam dentro do app, mas não geram push; tensão e corrente são independentes.
 
 Não use **Forçar parada** nas configurações do Android: o sistema pode impedir
 notificações até o app ser aberto novamente. Restrições de bateria/rede e
@@ -97,3 +97,23 @@ SELECT id,event_id,phase,attempts,error FROM push_jobs ORDER BY id DESC LIMIT 20
 A chave de leitura permite cadastrar/desativar push (não publicar telemetria).
 Tokens e o registro do app são guardados localmente; o app usa SecureStore.
 Não há garantia de entrega de notificações para proteção elétrica.
+
+## Diagnosticar ausência de push
+
+Permissão Android não confirma cadastro no backend. Em Ajustes, use Ativar/Atualizar
+registro. Depois toque Testar notificação em 15 segundos e vá para a tela inicial
+do Android antes do envio. Com o app aberto, a apresentação de push é suprimida
+para não duplicar banners internos.
+
+Volte e toque Verificar entrega de notificações. O diagnóstico distingue registro
+inexistente, worker parado, fila vazia, falha HTTP, ticket Expo e recibo FCM.
+HTTP401: confira token de acesso Expo, se a segurança push estiver ativada.
+InvalidCredentials: confira FCM V1 no Expo para com.chargesense.
+MismatchSenderId: confira se o JSON do app e a chave FCM são do mesmo Firebase.
+DeviceNotRegistered: atualize o registro. Ticket/recibo não comprovam exibição.
+A consulta de recibos pode levar cerca de 15 minutos.
+
+No emulador Android, use uma imagem com Google Play services e internet ativa.
+Não use Forçar parada. O teste independe de Wokwi, limites e relógio de medição.
+Endpoints POST push-test e push-diagnostics exigem chave de leitura e token do
+próprio registro no corpo; nenhum token ou chave é retornado no diagnóstico.

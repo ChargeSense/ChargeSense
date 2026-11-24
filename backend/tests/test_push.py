@@ -88,3 +88,35 @@ class PushTest(unittest.TestCase):
         self.subscribe(); self.send(0.5)
         self.subscribe(source='sensor')
         self.assertEqual(len(self.rows()),1)
+
+
+    def test_all_app_events_but_only_escalations_push(self):
+        self.subscribe()
+        for current in [3.5, 2.5, 1.5, 2.5, 0.5]:
+            self.send(current)
+        with self.app.state.store.connect() as db:
+            levels = [r[0] for r in db.execute('SELECT level FROM events ORDER BY id')]
+            pushed = [r[0] for r in db.execute('SELECT e.level FROM push_jobs p JOIN events e ON e.id=p.event_id ORDER BY p.id')]
+        self.assertEqual(levels, ['critical','alert','attention','alert','normal'])
+        self.assertEqual(pushed, ['critical','alert','normal'])
+
+    def test_diagnostics_and_scheduled_test(self):
+        body = dict(token='ExponentPushToken[test]',source='simulated')
+        base = '/api/v1/stations/bancada-01/'
+        headers = {'X-API-Key':'r'*24}
+        self.assertEqual(self.client.post(base+'push-diagnostics',json=body).status_code,401)
+        self.assertEqual(self.client.post(base+'push-test',json=body,headers=headers).status_code,409)
+        self.subscribe()
+        info = self.client.post(base+'push-diagnostics',json=body,headers=headers).json()
+        self.assertTrue(info['registered'])
+        self.assertTrue(info['workerRunning'])
+        self.assertIsNone(info['lastJob'])
+        response = self.client.post(base+'push-test',json=body,headers=headers)
+        self.assertEqual(response.status_code,200)
+        self.assertIsNone(self.worker.claim())
+        second = self.client.post(base+'push-test',json=body,headers=headers).json()
+        self.assertEqual(second['jobId'],response.json()['jobId'])
+        self.due(); self.step({},401)
+        info = self.client.post(base+'push-diagnostics',json=body,headers=headers).json()
+        self.assertEqual(info['lastJob']['error'],'HTTP401')
+        self.assertNotIn('token', str(info))

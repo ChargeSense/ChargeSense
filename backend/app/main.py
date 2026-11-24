@@ -1,3 +1,4 @@
+import time
 import asyncio
 from contextlib import suppress
 import hmac
@@ -48,6 +49,7 @@ def create_app(db_path=None, device_key=None, read_key=None, station=None, level
         app.state.levels = configured_levels
         app.state.store = Store(db_path or os.getenv('CHARGESENSE_DB', str(Path(__file__).resolve().parents[1] / 'data' / 'chargesense.db')))
         task = asyncio.create_task(PushWorker(app.state.store).run())
+        app.state.push_task = task
         try:
             yield
         finally:
@@ -139,6 +141,41 @@ def create_app(db_path=None, device_key=None, read_key=None, station=None, level
             else:
                 db.execute('DELETE FROM push_devices WHERE token=?', (payload.token,))
         return {'enabled': payload.enabled, 'source': payload.source}
+
+    @app.post('/api/v1/stations/{station_id}/push-diagnostics',
+              tags=['Notificacoes'], dependencies=[Depends(read_auth)])
+    def push_diagnostics(station_id: str, payload: PushSubscription):
+        check_station(station_id)
+        with app.state.store.connect() as db:
+            device = db.execute('SELECT source FROM push_devices WHERE token=? AND station=?',
+                                (payload.token, station_id)).fetchone()
+            job = db.execute('SELECT id,phase,attempts,error FROM push_jobs WHERE token=? ORDER BY id DESC LIMIT 1',
+                             (payload.token,)).fetchone()
+        return {'registered': device is not None, 'source': device['source'] if device else None,
+                'workerRunning': not app.state.push_task.done(), 'lastJob': dict(job) if job else None}
+
+    @app.post('/api/v1/stations/{station_id}/push-test',
+              tags=['Notificacoes'], dependencies=[Depends(read_auth)])
+    def push_test(station_id: str, payload: PushSubscription):
+        check_station(station_id)
+        with app.state.store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            device = db.execute('SELECT source FROM push_devices WHERE token=? AND station=?',
+                                (payload.token, station_id)).fetchone()
+            if not device:
+                raise HTTPException(409, 'Ative as notificacoes neste backend primeiro')
+            # One pending test per token; no broadcast and no synthetic circuit event.
+            pending = db.execute("SELECT id FROM push_jobs WHERE token=? AND event_id<0 AND phase='send'",
+                                 (payload.token,)).fetchone()
+            if pending:
+                return {'jobId': pending['id'], 'delaySeconds': 15}
+            message = dict(to=payload.token, title='ChargeSense · Teste de notificações',
+                           body='O envio push chegou ao dispositivo.', sound='default',
+                           priority='high', channelId='chargesense-alerts', ttl=300,
+                           data={'test': True, 'stationId': station_id, 'source': device['source']})
+            cursor = db.execute('INSERT INTO push_jobs(event_id,token,message,due,expires) VALUES(?,?,?,?,?)',
+                                (-time.time_ns(), payload.token, json.dumps(message), time.time()+15, time.time()+300))
+        return {'jobId': cursor.lastrowid, 'delaySeconds': 15}
 
     @app.get('/api/v1/stations/{station_id}/latest', tags=['Consulta'], dependencies=[Depends(read_auth)])
     def latest(station_id: str, source: Literal['sensor', 'simulated'] = 'sensor'):

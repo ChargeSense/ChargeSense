@@ -95,9 +95,8 @@ um intervalo maior que 15 s, reinicialização do emissor, leitura inválida ou
 valor ausente interrompe a confirmação pendente. Pacotes com medição mais de
 15 s antiga não alteram alertas; sem horário sincronizado, use measuredAt=null.
 
-Eventos são gerados nas subidas de nível e no retorno ao normal. Reduções
-intermediárias atualizam o estado silenciosamente, respeitando histerese e
-permanência. Uma nova subida em relação ao estado atual volta a notificar. Tensão e corrente são independentes. Estado e eventos ficam na mesma
+Todas as mudanças confirmadas geram eventos dentro do app. Apenas subidas de nível
+e retorno ao normal geram push. Histerese e permanência são preservadas. Tensão e corrente são independentes. Estado e eventos ficam na mesma
 transação SQLite e separados por estação/origem. Duplicatas e sequências antigas
 do mesmo boot não repetem nem alteram alertas. O banco existente recebe novas
 tabelas automaticamente, sem apagar leituras. Alterar a configuração reinicia
