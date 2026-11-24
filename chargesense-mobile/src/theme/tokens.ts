@@ -10,6 +10,7 @@ export const colors = {
   accentDark: '#123F38',
   blue: '#78B9F5',
   warning: '#F3C66B',
+  alert: '#FF9F43',
   warningSurface: '#3B301C',
   danger: '#FF7777',
   dangerSurface: '#402326',
@@ -17,3 +18,4 @@ export const colors = {
   successSurface: '#123F38',
 };
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 28 };
+

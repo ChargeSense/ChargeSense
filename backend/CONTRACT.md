@@ -56,7 +56,7 @@ Eventos: measurement_uncalibrated, measurement_invalid ou current_threshold. Inc
 
 ## Extensão de eventos de limites
 
-`current_threshold` e `voltage_threshold` indicam mudanças para níveis attention,
+`current_threshold` e `voltage_threshold` indicam aumentos de gravidade para níveis attention,
 alert ou critical. `current_recovered` e `voltage_recovered` usam level `normal`.
 Eventos novos de limites incluem `value`, `threshold` e `unit` (A/V). Em recuperação,
 threshold é a fronteira de retorno (primeiro limite menos histerese). Eventos
@@ -79,3 +79,6 @@ Retransmissões mantêm o horário e ID originais e não repetem alertas.
 A origem sensor mantém as validações anteriores; sem horário, timestampSource
 é unknown. Outros erros de payload continuam retornando 422. Não há alteração
 retroativa de leituras antigas nem necessidade de apagar o banco.
+
+Reduções entre níveis de perigo não geram eventos; o estado é atualizado para
+avaliar futuras subidas. O retorno ao normal gera recuperação.

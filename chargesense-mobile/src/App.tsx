@@ -35,6 +35,10 @@ function sourceName(source: DataSource): string { return source === 'sensor' ? '
 function levelName(level: StationEvent['level']): string {
   return ({ normal: 'Normalizado', diagnostic: 'Diagnóstico', attention: 'Atenção', alert: 'Alerta', critical: 'Crítico' })[level];
 }
+function levelColor(level: StationEvent['level']): string {
+  return ({ normal: colors.success, diagnostic: colors.blue, attention: colors.warning,
+    alert: colors.alert, critical: colors.danger })[level];
+}
 function eventDetails(event: StationEvent): string {
   return event.value != null && event.threshold != null
     ? ` · ${event.value.toFixed(3)} ${event.unit ?? ''} (limite: ${event.threshold.toFixed(3)} ${event.unit ?? ''})` : '';
@@ -109,7 +113,7 @@ function Overview({ reading, status, mode, refreshing, error, onRefresh, events 
 }
 
 function EventRow({ event }: { event: StationEvent }) {
-  const color = event.level === 'critical' ? colors.danger : event.level === 'alert' ? colors.warning : event.level === 'attention' ? colors.warning : colors.blue;
+  const color = levelColor(event.level);
   return <View style={styles.eventRow}><View style={[styles.eventRail, { backgroundColor: color }]} /><View style={{ flex: 1 }}><Text style={styles.eventTitle}>{eventName(event.kind)}{eventDetails(event)}</Text><Text style={styles.eventMeta}>{levelName(event.level)} · {formatDate(event.receivedAt)}</Text></View></View>;
 }
 
@@ -267,7 +271,7 @@ export default function App() {
     <StatusBar barStyle="light-content" backgroundColor={colors.background} />
     <Header subtitle={title} />
     {notice && mode === 'backend' ? <View accessibilityRole="alert" accessibilityLiveRegion="assertive" style={{ padding: 12, backgroundColor: colors.surfaceRaised }}>
-      <Text style={{ color: notice.level === 'critical' ? colors.danger : colors.accent, fontWeight: '700' }}>
+      <Text style={{ color: levelColor(notice.level), fontWeight: '700' }}>
         {levelName(notice.level)} · {sourceName(source)}
       </Text>
       <Text style={{ color: colors.text }}>{eventName(notice.kind)}{eventDetails(notice)}</Text>

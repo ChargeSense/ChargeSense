@@ -68,10 +68,12 @@ class AlertRules:
                         pending = [target, stamp]
                     state['pending'] = pending
                     if stamp - pending[1] >= self.hold:
-                        emit(metric + ('_recovered' if target == 0 else '_threshold'),
-                             'normal' if target == 0 else LEVELS[target], value,
-                             bounds[target - 1] if target else bounds[0] - margin,
-                             'A' if metric == 'current' else 'V')
+                        # Track improvements silently; notify escalation or full recovery.
+                        if target > previous or target == 0:
+                            emit(metric + ('_recovered' if target == 0 else '_threshold'),
+                                 'normal' if target == 0 else LEVELS[target], value,
+                                 bounds[target - 1] if target else bounds[0] - margin,
+                                 'A' if metric == 'current' else 'V')
                         state['level'] = target
                         state.pop('pending', None)
                 state['last'] = stamp

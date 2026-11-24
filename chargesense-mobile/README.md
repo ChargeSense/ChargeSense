@@ -58,3 +58,7 @@ a aba Eventos conserva o histórico. A primeira consulta apenas carrega históri
 sem notificar retroativamente. Configure as regras seguindo backend/README.md.
 Esta funcionalidade exige o app aberto; não envia notificações do sistema com
 o app fechado. Não representa atuação ou confirmação de desligamento físico.
+
+Cores de eventos e banners: atenção amarela, alerta laranja, crítico vermelho e
+normalizado verde. Novos avisos ocorrem em agravamentos ou retorno ao normal;
+reduções intermediárias são silenciosas. Eventos antigos permanecem no histórico.
