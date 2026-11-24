@@ -11,12 +11,23 @@ cd backend
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-$env:CHARGESENSE_DEVICE_KEY = (python -c "import secrets; print(secrets.token_hex(24))")
-$env:CHARGESENSE_READ_KEY = (python -c "import secrets; print(secrets.token_hex(24))")
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+notepad .env
+# Preencha as chaves e os limites antes de iniciar.
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Chaves privadas, diferentes, mínimo 24 caracteres. Sem chave padrão. Não gerar novas se a API continua com as antigas.
+O backend carrega automaticamente `backend/.env`. Copie para ele as mesmas chaves já usadas pelo Wokwi/ESP32 e aplicativo, e seus limites atuais. Chaves distintas com pelo menos 24 caracteres; o exemplo deixa ambas vazias para não fornecer credenciais padrão. O arquivo real fica ignorado pelo Git.
+
+Nas próximas execuções basta, dentro de `backend`:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Reinicie o backend após editar o arquivo. Variáveis já definidas no terminal/sistema têm prioridade sobre o `.env`; use um novo terminal sem os antigos comandos `$env:...` para evitar valores antigos. O `.env` do aplicativo continua separado, em `chargesense-mobile/.env`. Nunca coloque a chave de dispositivo ou o token privado Expo em variáveis `EXPO_PUBLIC_*`.
+
+O túnel Cloudflare continua sendo iniciado separadamente. Sua URL temporária pode mudar; nesse caso atualize o Wokwi e o endereço/registro de notificações no aplicativo.
 
 - Documentação interativa: http://127.0.0.1:8000/docs
 - Saúde: http://127.0.0.1:8000/health
@@ -52,7 +63,7 @@ Ver [contrato](CONTRACT.md). Consultas usam `X-API-Key` com chave de leitura. In
 
 Limites de corrente ficam desabilitados por padrão. Para testar eventos com o simulador, configure três valores RMS crescentes em ampères antes de iniciar a API, por exemplo `15,16,17` (atenção, alerta, crítico) e reinicie o processo. São valores fictícios para teste de software, não parâmetros de proteção física.
 
-Cada leitura acima do limite gera evento. Ainda não há histerese, agrupamento de incidentes ou notificações push nesta versão. A API não aciona relé nem substitui futura lógica local de segurança.
+Eventos são gerados em mudanças de nível confirmadas. Há histerese e confirmação temporal opcionais; `CHARGESENSE_ALERT_HOLD_SECONDS=0` confirma na primeira leitura. Push é enviado em agravamentos e no retorno ao normal. A API não aciona relé nem substitui futura lógica local de segurança.
 
 ## Testar
 

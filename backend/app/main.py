@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
+from dotenv import load_dotenv
+
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.security import APIKeyHeader
 from fastapi.exceptions import RequestValidationError
@@ -216,5 +218,8 @@ def create_app(db_path=None, device_key=None, read_key=None, station=None, level
     return app
 
 
+# Resolve relative to this file, independent of the terminal's working directory.
+# Explicit process variables take precedence over local configuration.
+load_dotenv(Path(__file__).resolve().parents[1] / '.env', override=False, encoding='utf-8-sig')
 app = create_app()
 
