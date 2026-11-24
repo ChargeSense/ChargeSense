@@ -60,7 +60,6 @@ function Header({ subtitle }: { subtitle: string }) {
   return <View style={styles.header}>
     <View style={styles.brandMark}><View style={styles.brandBolt}><Text style={styles.brandBoltText}>C</Text></View></View>
     <View style={{ flex: 1 }}><Text style={styles.brand}>CHARGESENSE</Text><Text style={styles.headerSubtitle}>{subtitle}</Text></View>
-    <View style={styles.headerTag}><Text style={styles.headerTagText}>TCC</Text></View>
   </View>;
 }
 
